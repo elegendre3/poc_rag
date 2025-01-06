@@ -27,7 +27,7 @@ def homepage_content():
     col1.image("data/alkane_logo.png", width=100)
     col2.header("Welcome to the RAG LLM Demo Page")
     
-    st.markdown("# PDF question Answering")
+    st.markdown("# PDF Question Answering")
 
     # Load Model (cached)
     model, embeddings = load_model_and_embeddings_cached(MODEL)
