@@ -1,0 +1,61 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Pytest",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "args": ["${workspaceFolder}/tests"],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "envFile": "${workspaceFolder}/.env",
+            "env":{
+                "COUNTRY": "default_test"
+            }
+        },
+        {
+            "name": "Python Debugger: Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "cwd": "/Users/eliottlegendre/Documents/prive/code/poc_rag",
+            "justMyCode": true,
+            "env": {
+                "PYTHONPATH": "${cwd}",
+            }
+        },
+        {
+            "name": "Python: Run Model",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/trinity/pipelines/run_model.py",
+            "console": "integratedTerminal",
+            "cwd": "/Users/eliottlegendre/PernodRicard/PR.Data.KDPMTInvestment.Trinity",
+            "justMyCode": true,
+            "env": {
+                "PYTHONPATH": "${cwd}",
+                "COUNTRY": "usa",
+                "ENV": "local",
+                "AZUREML_ARTIFACTS_DEFAULT_TIMEOUT": "1000"
+            }
+        },
+        {
+            "name": "Python: Run Model AML",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/trinity/pipelines/run_model_aml.py",
+            "console": "integratedTerminal",
+            "cwd": "/Users/eliottlegendre/PernodRicard/PR.Data.KDPMTInvestment.Trinity",
+            "justMyCode": true,
+            "env": {
+                "PYTHONPATH": "${cwd}",
+                "COUNTRY": "usa",
+            }
+        },
+    ]
+}
