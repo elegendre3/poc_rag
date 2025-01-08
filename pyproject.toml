@@ -12,6 +12,8 @@ langchain-openai = "^0.2.14"
 langchain-community = "^0.3.14"
 pandas = "^1.4.4"
 streamlit = "^1.13.0"
+fastapi = "^0.115.6"
+uvicorn = "^0.34.0"
 
 
 [tool.poetry.group.dev.dependencies]
