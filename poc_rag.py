@@ -51,7 +51,8 @@ def homepage_content():
     # Enter question
     question = st.text_input(
         "Enter your question(s) here (if multiple, separate by '?')", 
-        value="De quel type de document s'agit-il?Qui sont les signataires?Qui sont les sous-signés?Que faut-il savoir en priorité a propos de ce document?"
+        value="De quel type de document s'agit-il?Qui sont les signataires?Que faut-il savoir en priorité a propos de ce document?"
+        # value="De quel type de document s'agit-il?Qui sont les signataires?Qui sont les sous-signés?Que faut-il savoir en priorité a propos de ce document?"
         # value="What type of document is this? When was it signed? Who are the Parties?"
     )
     if st.button("Ask the model"):

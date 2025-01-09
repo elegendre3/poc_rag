@@ -1,15 +1,37 @@
 from datetime import datetime
 from contextlib import asynccontextmanager
 import logging
+import os
+import time
+from typing import List
+import uuid
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
+from langchain_core.documents import Document
+from pinecone.grpc import PineconeGRPC as Pinecone
 import uvicorn 
 
 from source.rag import (
     load_pdf,
     load_model_and_embeddings,
-    pdf_question_answering_pipeline,
+    pdf_qa_pipeline_inmemory,
+    create_rag_chain,
 )
+from source.text import (
+    chunk_pdf,
+    load_pdf,
+)
+from source.vector_store import (
+    create_index_with_pinecone,
+    create_vectorstore_pinecone,
+    create_retriever_pinecone,
+    delete_index_pinecone,
+)
+
+load_dotenv()
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 
 
 class Model:
@@ -18,15 +40,48 @@ class Model:
         self.model = None
         self.model_name = None
         self.embeddings = None
-        self.pages = None
         self.chain = None
+        self.pc = None
+        self.index_name = None
+        self.index = None
+        self.embeddings_dim = 1536
+        self.vectorstore = None
+        self.retriever = None
+        self.pages = None
+
+    def init_rag_system(self):
+        self.load_model_and_embeddings()
+        self.init_vectorstore()
 
     def load_model_and_embeddings(self):
         self.model_name = "llama3.2"
         self.model, self.embeddings = load_model_and_embeddings(self.model_name)
         return None
 
+    def init_vectorstore(self):
+        self.index_name = "example-index"
+    
+        self.pc = Pinecone(api_key=PINECONE_API_KEY)
+
+        create_index_with_pinecone(self.pc, index_name=self.index_name, dimension=self.embeddings_dim)
+        self.index = self.pc.Index(self.index_name)
+
+        while not self.pc.describe_index(self.index_name).status['ready']:
+            logging.info('waiting for index to be ready..')
+
+        self.vectorstore = create_vectorstore_pinecone(self.index_name, embeddings=self.embeddings)
+        self.retriever = create_retriever_pinecone(self.vectorstore)
+
     def load_pdf(self, pdf_filepath):
+        logging.info(f"Loading [{pdf_filepath}]")
+        chunks = chunk_pdf(pdf_filepath)
+        logging.info(f"Excerpt: {str(chunks[0])[:200]}")
+        
+        logging.info(f"Vectorizing pdf..")
+        self.vectorize_pdf(str(pdf_filepath), chunks)
+        return {"file_name": pdf_filepath, "num_chunks": len(chunks)}
+    
+    def load_pdf_inmem(self, pdf_filepath):
         logging.info(f"Loading [{pdf_filepath}]")
         self.pages = load_pdf(pdf_filepath)
         logging.info(f"Excerpt: {str(self.pages[0])[:200]}")
@@ -35,8 +90,18 @@ class Model:
         self.vectorize_pdf()
         return {"file_name": pdf_filepath, "num_pages": len(self.pages)}
 
-    def vectorize_pdf(self):
-        self.chain = pdf_question_answering_pipeline(self.pages, self.embeddings, self.model)
+    def vectorize_pdf(self, title: str, chunks: List[str]):
+        documents = [Document(page_content=d, metadata={"title": title}) for d in chunks]
+        init_vector_count = self.index.describe_index_stats()['total_vector_count']
+        self.vectorstore.add_documents(documents=documents, ids=[str(uuid.uuid4()) for _ in range(len(documents))])
+        logging.info('Indexing doc..')
+        while (self.index.describe_index_stats()['total_vector_count'] - init_vector_count) < len(documents):
+            time.sleep(1)
+        self.is_ready = True
+        self.chain = create_rag_chain(self.retriever, self.model)
+
+    def vectorize_pdf_inmem(self):
+        self.chain = pdf_qa_pipeline_inmemory(self.pages, self.embeddings, self.model)
         self.is_ready = True
         return None
     
@@ -62,6 +127,9 @@ class Model:
         self.is_ready = False
         return None
 
+    def delete_pinecone_index(self):
+        delete_index_pinecone(self.pc, self.index_name)
+
 
 pdf_model = Model()
 
@@ -71,12 +139,18 @@ async def lifespan(app: FastAPI):
     logging.info("Application startup:")
     logging.info("Initializing model..")
     try:
-        pdf_model.load_model_and_embeddings()
+        pdf_model.init_rag_system()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error initializing model: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error initializing models: {str(e)}")
     yield
     # Shutdown event
-    logging.info("Application shutdown: Perform cleanup tasks here")
+    logging.info("Application shutdown:")
+    try:
+        pdf_model.delete_pinecone_index()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting Pinecone index: {str(e)}")
+
+
 
 app = FastAPI(lifespan=lifespan)
 
