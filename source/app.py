@@ -2,6 +2,7 @@ from datetime import datetime
 from contextlib import asynccontextmanager
 import logging
 import os
+from pathlib import Path
 import time
 from typing import List
 import uuid
@@ -178,9 +179,9 @@ def set_to_not_ready():
 
 @app.post("/load_pdf")
 def load_pdf_file(pdf_filepath: str):
-    pdf_filepath = "data/pdfs/CDI Eliott LEGENDRE.pdf"
+    # pdf_filepath = "data/pdfs/CDI Eliott LEGENDRE.pdf"
     try:
-        pdf_model.load_pdf(pdf_filepath)
+        pdf_model.load_pdf(Path(pdf_filepath))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error loading PDF: {str(e)}")
     return {"message": f"Loaded PDF [{pdf_filepath}]"}
