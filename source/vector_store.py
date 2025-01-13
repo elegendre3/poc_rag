@@ -49,16 +49,19 @@ def embed_with_pinecone(
     return embeddings
 
 def create_index_with_pinecone(pc_client: Pinecone, index_name: str, dimension: int = 1024):
-    if not pc_client.has_index(index_name):
-        pc_client.create_index(
-            name=index_name,
-            dimension=dimension,
-            metric="cosine",
-            spec=ServerlessSpec(
-                cloud='aws', 
-                region='us-east-1'
-            ) 
+    if pc_client.has_index(index_name):
+        pc_client.delete_index(index_name)
+    
+    pc_client.create_index(
+        name=index_name,
+        dimension=dimension,
+        metric="cosine",
+        spec=ServerlessSpec(
+            cloud='aws', 
+            region='us-east-1'
         ) 
+    )
+
 
 def upsert_records_with_pinecone(
         pc_index: Pinecone.Index,

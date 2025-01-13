@@ -46,7 +46,7 @@ def homepage_content():
             with st.spinner('Vectorizing the PDF ..'):
                 response = requests.post(f"{FASTAPI_ENDPOINT}/load_pdf", params={"pdf_filepath": str(pdf_filepath)})
                 st.markdown(f"[{response.status_code}] - {response.json()}")
-        col222.markdown(f"- Number of pages: TODO")
+        # col222.markdown(f"- Number of pages: TODO")
 
     # Enter question
     question = st.text_input(

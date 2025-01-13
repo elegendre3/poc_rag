@@ -1,16 +1,16 @@
 from datetime import datetime
 from contextlib import asynccontextmanager
 import logging
-import os
 from pathlib import Path
+from ratelimit import limits, sleep_and_retry
 import time
 from typing import List
 import uuid
 
-from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from langchain_core.documents import Document
 from pinecone.grpc import PineconeGRPC as Pinecone
+from pydantic_settings import BaseSettings
 import uvicorn 
 
 from source.rag import (
@@ -30,9 +30,19 @@ from source.vector_store import (
     delete_index_pinecone,
 )
 
-load_dotenv()
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
+
+class Settings(BaseSettings):
+    openai_api_key: str
+    pinecone_api_key: str
+    model_name: str = "llama3.2"
+    embeddings_dim: int = 1536
+    chunk_size: int = 1000
+    chunk_overlap: int = 200
+    ratelimit_oneminute: int = 60
+    max_calls_per_minute: int = 6
+    
+    class Config:
+        env_file = ".env"
 
 
 class Model:
@@ -60,9 +70,9 @@ class Model:
         return None
 
     def init_vectorstore(self):
-        self.index_name = "example-index"
+        self.index_name = "single-doc-index"
     
-        self.pc = Pinecone(api_key=PINECONE_API_KEY)
+        self.pc = Pinecone(api_key=settings.pinecone_api_key)
 
         create_index_with_pinecone(self.pc, index_name=self.index_name, dimension=self.embeddings_dim)
         self.index = self.pc.Index(self.index_name)
@@ -128,11 +138,16 @@ class Model:
         self.is_ready = False
         return None
 
-    def delete_pinecone_index(self):
-        delete_index_pinecone(self.pc, self.index_name)
+    def delete_pinecone_index(self, index_name):
+        if self.pc is None:
+            self.init_rag_system()
+        delete_index_pinecone(self.pc, index_name)
 
 
+# Define stateful objects
+settings = Settings()
 pdf_model = Model()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -145,11 +160,11 @@ async def lifespan(app: FastAPI):
         raise HTTPException(status_code=500, detail=f"Error initializing models: {str(e)}")
     yield
     # Shutdown event
-    logging.info("Application shutdown:")
     try:
-        pdf_model.delete_pinecone_index()
+        pdf_model.delete_pinecone_index('single_doc_index')
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting Pinecone index: {str(e)}")
+    logging.info("Application shutdown..")
 
 
 
@@ -159,6 +174,22 @@ app = FastAPI(lifespan=lifespan)
 @app.get("/")
 def read_root():
     return {"message": "Welcome to the FastAPI app"}
+
+@app.get("/health")
+async def health_check():
+    try:
+        # Check Pinecone
+        index_status = pdf_model.pc.describe_index(pdf_model.index_name).status
+        # Check LLM
+        model_response = pdf_model.is_ready
+        
+        return {
+            "status": "healthy",
+            "index_status": index_status,
+            "model_status": "Ready" if is_ready else "Not Ready",
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/is_ready")
 def is_ready():
@@ -186,6 +217,9 @@ def load_pdf_file(pdf_filepath: str):
         raise HTTPException(status_code=500, detail=f"Error loading PDF: {str(e)}")
     return {"message": f"Loaded PDF [{pdf_filepath}]"}
 
+
+@sleep_and_retry
+@limits(calls=settings.max_calls_per_minute, period=settings.ratelimit_oneminute)
 @app.post("/ask")
 def ask_model(questions: str):
     try:
@@ -193,6 +227,15 @@ def ask_model(questions: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error creating PDF chain: {str(e)}")
     return {"message": result["result"]}
+
+@app.post("/delete_index")
+def delete_pincecone_index(index_name: str):
+    try:
+        pdf_model.delete_pinecone_index(index_name)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting pinecone index: {str(e)}")
+    return {"message": "ok"}
+
 
 
 if __name__ == "__main__":
