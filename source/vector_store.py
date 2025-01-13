@@ -124,7 +124,7 @@ def delete_index_pinecone(pc_client: Pinecone, index_name: str):
     pc_client.delete_index(index_name)
 
 
-def create_vectorstore_pinecone(pc_index_name: str, embeddings=OpenAIEmbeddings()):
+def create_vectorstore_pinecone(pc_index_name: str, embeddings):
     # 1 - in-memory docarray
     # vectorstore = DocArrayInMemorySearch.from_documents(pages, embedding=embeddings)
     # 2 - in-memory
@@ -247,6 +247,6 @@ def main_2():
 
     delete_index_pinecone(pc, index_name)
 
-if __name__ == "__main__":
+# if __name__ == "__main__":
     # main()
-    main_2()
+    # main_2()

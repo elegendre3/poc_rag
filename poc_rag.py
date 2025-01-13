@@ -19,7 +19,20 @@ def homepage_content():
     col1, col2 = st.columns([1, 10])
     col1.image("data/alkane_logo.png", width=100)
     col2.header("Welcome to the RAG LLM Demo Page")
-    
+
+    # Sanity Checks
+    with st.spinner("Application starting.."):
+        api_keys_set = requests.get(f"{FASTAPI_ENDPOINT}/are_api_keys_set").json()['message']
+        if not api_keys_set:
+            st.warning("Please set your API keys in the Credentials page before proceeding.")
+            st.stop()
+        
+        model_healthy = requests.get(f"{FASTAPI_ENDPOINT}/health")
+        if model_healthy.status_code == 401:
+            st.warning("Unauthorized - Model cannot be intialized.\nPlease check your API keys in the Credentials page.")
+            st.stop()
+    # 
+
     st.markdown("# PDF Question Answering")
 
     # Upload PDF file
