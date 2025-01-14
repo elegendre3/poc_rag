@@ -17,19 +17,20 @@ from langchain_openai.embeddings import OpenAIEmbeddings
 MODEL = "llama3.2"
 
 
-async def load_model_and_embeddings(model_name: str, openai_api_key: str = None):
+
+def load_model_and_embeddings(model_name: str, openai_api_key: str = None):
     """
     Usage: model.invoke("Tell me a joke"))
     """
     if model_name.startswith("gpt"):
         if openai_api_key is not None:
-            model = await ChatOpenAI(openai_api_key=openai_api_key, model=model_name)
-            embeddings = await  OpenAIEmbeddings()
+            model = ChatOpenAI(openai_api_key=openai_api_key, model=model_name)
+            embeddings = OpenAIEmbeddings()
         else:
             raise ValueError(f"To use GPT models like [{model_name}] you need to pass an OPENAI_API_KEY")
     else:
-        model = await Ollama(model=model_name)
+        model = Ollama(model=model_name)
         # embeddings = OllamaEmbeddings(model=model_name)
-        embeddings = await OpenAIEmbeddings(model="text-embedding-ada-002")
+        embeddings = OpenAIEmbeddings(model="text-embedding-ada-002")
     return model, embeddings
 

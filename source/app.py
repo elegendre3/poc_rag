@@ -9,6 +9,7 @@ from typing import (Any, List, Optional)
 import uuid
 from fastapi import FastAPI, HTTPException
 from langchain_core.documents import Document
+from langchain_core.output_parsers import StrOutputParser
 from openai import OpenAIError
 from pinecone.core.openapi.shared.exceptions import UnauthorizedException
 from pinecone.grpc import PineconeGRPC as Pinecone
@@ -16,12 +17,14 @@ from pydantic_settings import BaseSettings
 import uvicorn 
 
 from source.rag import (
+    create_rag_chain,
     load_pdf,
     load_model_and_embeddings,
     pdf_qa_pipeline_inmemory,
-    create_rag_chain,
+    question_answering_prompt,
 )
 from source.text import (
+    chunk_bank_statement_soge,
     chunk_pdf,
     load_pdf,
 )
@@ -62,15 +65,18 @@ class Model:
         self.pages = None
 
     def init_rag_system(self):
-        self.load_model_and_embeddings()
+        self.load_models()
+        logging.info("Models loaded..")
         self.init_vectorstore()
         return {"message": "Model and Vectorstore initialized"}
 
-    async def load_model_and_embeddings(self):
+    def load_models(self):
         try:
-            self.model, self.embeddings = await load_model_and_embeddings(self.settings.model_name, self.settings.openai_api_key)
+            self.model, self.embeddings = load_model_and_embeddings(self.settings.model_name, self.settings.openai_api_key)
         except OpenAIError as e:
             raise HTTPException(status_code=401, detail=f"Unauthorized - Check OpenAI API Key: {str(e)}")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error loading models: {str(e)}")
         return None
 
     def init_vectorstore(self):
@@ -89,6 +95,14 @@ class Model:
         except UnauthorizedException as e:
             raise HTTPException(status_code=401, detail=f"Unauthorized - Check Pinecone API Key: {str(e)}")
 
+    def chunk_bank_statement(self, pdf_filepath):
+        logging.info(f"Loading [{pdf_filepath}]")
+        try:
+            chunks = chunk_bank_statement_soge(pdf_filepath)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error chunking bank Statement: {str(e)}")
+        return chunks
+        
     def load_pdf(self, pdf_filepath):
         logging.info(f"Loading [{pdf_filepath}]")
         chunks = chunk_pdf(pdf_filepath, chunk_size=self.settings.chunk_size, overlap=self.settings.chunk_overlap)
@@ -140,6 +154,24 @@ class Model:
         logging.info(f"Time elapsed: [{hours}:{minutes}:{seconds}]")
         return {"time_elapsed": f"{hours}:{minutes}:{seconds}", "result": output}
 
+    def ask_with_context(self, context: str, question: str):
+        if self.model is None:
+            logging.info("Model not loaded - waiting..")
+            time.sleep(5)
+            return {"result": "Model not loaded, retry"}
+            # self.load_models()
+            # raise Exception("Model not loaded")
+        prompt = question_answering_prompt() 
+        model = self.model 
+        parser = StrOutputParser()
+        print(f'Prompt: {prompt}')
+        print(f'Model: {model}')
+        print(f'Parser: {parser}')
+        chain = prompt | model | parser
+        # chain =  question_answering_prompt() | pdf_model.model | StrOutputParser()
+        response = chain.invoke({"context": context, "question": question})
+        return {"result": response}
+
     def set_to_not_ready(self):
         self.is_ready = False
         return None
@@ -160,7 +192,7 @@ class Model:
     def update_openai_api_key(self, api_key):
         self.settings.openai_api_key = api_key
         try:
-            self.load_model_and_embeddings()
+            self.load_models()
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error with OPENAI API Key: {str(e)}")
         return None
@@ -267,6 +299,17 @@ def set_to_not_ready():
     pdf_model.set_to_not_ready()
     return {"message": f"Set model status to [{pdf_model.is_ready}]"}
 
+
+@app.post("/chunk_bank_statement")
+def chunk_bank_statement(pdf_filepath: str):
+    # pdf_filepath = "data/pdfs/bank_statement.pdf"
+    try:
+        response = pdf_model.chunk_bank_statement(Path(pdf_filepath))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error loading PDF: {str(e)}")
+    return {"data": response}
+
+
 @app.post("/load_pdf")
 def load_pdf_file(pdf_filepath: str):
     # pdf_filepath = "data/pdfs/CDI Eliott LEGENDRE.pdf"
@@ -285,6 +328,16 @@ def ask_model(questions: str):
         result = pdf_model.ask(questions)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error creating PDF chain: {str(e)}")
+    return {"message": result["result"]}
+
+@sleep_and_retry
+@limits(calls=settings.max_calls_per_minute, period=settings.ratelimit_oneminute)
+@app.post("/ask_with_context")
+def ask_model_with_context(context: str, question: str):
+    # try:
+    result = pdf_model.ask_with_context(context, question)
+    # except Exception as e:
+        # raise HTTPException(status_code=500, detail=f"Error querying model: {str(e)}")
     return {"message": result["result"]}
 
 @app.post("/delete_index")
