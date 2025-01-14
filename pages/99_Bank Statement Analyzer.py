@@ -26,6 +26,7 @@ def display_operation_legend():
         'virement': '#E6E6FF',
         'remise cheque': '#FFFDE6',
         'frais carte': '#FFE6FF',
+        'emprunt': '#E6FFFE',
         'autre': '#F2F2F2'
     }
     
@@ -87,6 +88,7 @@ def color_rows_by_operation(df):
             'virement': '#E6E6FF',        # light blue
             'remise cheque': '#FFFDE6',   # light yellow
             'frais carte': '#FFE6FF',     # light purple
+            'emprunt': '#E6FFFE',         # light cyan
             'autre': '#F2F2F2'            # light gray
         }
         return colors.get(operation, '#FFFFFF')

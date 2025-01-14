@@ -1,7 +1,7 @@
 import logging
 from pathlib import Path
 import re
-from typing import (List, Tuple)
+from typing import (Dict, List, Tuple)
 
 from langchain_community.document_loaders import PyPDFLoader
 
@@ -77,10 +77,12 @@ def extract_amount_cents(text: str) -> int:
         '17.839,45' -> 1783945
         'SOLDE PRÉCÉDENT AU 06/12/2024 17.839,45' -> 17839
     """
-    pattern = r'(\d+[.,\d]*\d+),(\d{2})$'
+    # pattern = r'(\d+[.,\d]*\d+),(\d{2})$'
+    # pattern = r'(\d+(?:[ \.]\d{3})*)[,\.]\s*(\d{2})$'
+    pattern = r'(\d{2}[./]\d{2}[./]\d{4})\s+(\d+(?:[ \.]\d{3})*)[,\.]\s*(\d{2})$'
     match = re.search(pattern, text)
     if match:
-        whole_part = match.group(1).replace('.', '')  # Remove thousand separators
+        whole_part = match.group(2).replace('.', '').replace(' ', '')  # Remove thousand separators
         # cents_part = match.group(2)
         return int(whole_part)
     return -1
@@ -91,11 +93,12 @@ def extract_two_amounts_cents(text: str) -> tuple[int, int]:
     Example:
         'TOTAUX DES MOUVEMENTS 2.887,76 4.100,62' -> (288776, 410062)
     """
-    pattern = r'(\d+[.,\d]*\d+),(\d{2})\s+(\d+[.,\d]*\d+),(\d{2})'
+    # soge_pattern = r'(\d+[.,\d]*\d+),(\d{2})\s+(\d+[.,\d]*\d+),(\d{2})'
+    pattern = r'(\d+(?:[ \.]\d{3})*)[,\.]\s*(\d{2})\s+(\d+(?:[ \.]\d{3})*)[,\.]\s*(\d{2})'
     match = re.search(pattern, text)
     if match:
-        amount1 = int(match.group(1).replace('.', ''))
-        amount2 = int(match.group(3).replace('.', ''))
+        amount1 = int(match.group(1).replace('.', '').replace(' ', ''))
+        amount2 = int(match.group(3).replace('.', '').replace(' ', ''))
         return amount1, amount2
     return -1, -1
 
@@ -109,15 +112,42 @@ def extract_two_dates_operation_amount(text: str) -> Tuple[int, int]:
         (True, '16/12/2024', '16/12/2024', 'PRELEVEMENT EUROPEEN', '')
         'SOLDE PRÉCÉDENT AU 06/12/2024' -> (False, '', '', '', '')
     """
-    pattern = r'^(\d{2}/\d{2}/\d{4})\s+(\d{2}/\d{2}/\d{4})\s+(.+?)(?:\s+(\d{1,3}(?:\.\d{3})*,\d{2}))?$'
-    match = re.match(pattern, text)
+    soge_pattern = r'^(\d{2}/\d{2}/\d{4})\s+(\d{2}/\d{2}/\d{4})\s+(.+?)(?:\s+(\d{1,3}(?:\.\d{3})*,\d{2}))?$'
+    match = re.match(soge_pattern, text)
     if match:
         date1 = match.group(1)
         date2 = match.group(2)
         operation_text = match.group(3)
         amount = match.group(4) or ''
-        return True, date1, date2, operation_text, amount
-    return False, '', '', '', ''
+        # return True, date1, date2, operation_text, amount
+        return {
+            "is_beginning": True,
+            "date1": date1,
+            "operation_text": operation_text,
+            "amount": amount
+        }
+    else:
+        bnp_pattern = r'^(\d{2}\.\d{2})\s+(\d{2}\.\d{2})\s*(\d+,\d{2})?(.+)?$'
+        match = re.match(bnp_pattern, text)
+        if match:
+            date1 = match.group(1)
+            date2 = match.group(2)
+            amount = match.group(3)
+            operation_text = match.group(4) or ''
+            # return True, date1, date2, operation_text, amount
+            return {
+                "is_beginning": True,
+                "date1": date1,
+                "operation_text": operation_text,
+                "amount": amount
+            }
+    # return False, '', '', '', ''
+    return {
+            "is_beginning": False,
+            "date1": '',
+            "operation_text": '',
+            "amount": ''
+        }
 
 def is_line_beginning_of_item(text: str) -> bool:
    """
@@ -137,36 +167,52 @@ def bank_operation_classifier(text: str) -> Tuple[str, str]:
     - SOCIETE GENERALE
     """
     lower_text = text.lower()
-    if "carte" in lower_text:
-        return ("paiement carte", "debit")
-    elif "prelevement" in lower_text:
+    if ("prelevement" in lower_text) or ("prlv" in lower_text):
         return ("prelevement", "debit")
-    elif "vir perm" in lower_text:
+    elif ("vir perm" in lower_text) or (("vir faveur tiers" in lower_text)):
         return ("virement", "debit")
-    elif "vir recu" in lower_text:
+    elif ("vir recu" in lower_text) or ("vir sepa recu" in lower_text) or ("vir cpte a cpte recu" in lower_text):
         return ("virement", "credit")
     elif "remise cheque" in lower_text:
         return ("remise cheque", "credit")
-    elif ("cotisation jazz" in lower_text) or ("option tranquillite" in lower_text):
+    elif ("cotisation jazz" in lower_text) or ("option tranquillite" in lower_text) or ("commissions cotisation" in lower_text):
         return ("frais carte", "debit")
+    # elif ("retrait" in lower_text) or ("dab" in lower_text):
+    #     return ("retrait", "debit")
+    elif ("echeance pret" in lower_text):
+        return ("emprunt", "debit")
+    if ("carte" in lower_text) or ("du" in lower_text):
+        return ("paiement carte", "debit")
     else:
         return ("autre", "debit")
-def append_line_item(line_item: List[str], lines: List) -> List:
+
+
+def append_line_item(line_item: Dict, lines: List) -> List:
     """
-    Append line item to list of lines
+    Append line items to list of lines
     """
-    if len(line_item) == 0:
+    if len(line_item['date']) == 0:
         return lines
-    date = line_item[0]
-    operation_txt = line_item[2]
-    amount = int(line_item[-1].split(',')[0].replace('.', '')) + float(f"0.{line_item[-1].split(',')[1]}")
-    
+    date = line_item['date']
+    operation_txt = line_item['operation_text']
+    if len(operation_txt) == 0:
+        operation_txt = " ".join(line_item['extras'][:2])
+        line_item['extras'] = line_item['extras'][2:]
+
+    try:
+        amount = int(line_item['amount'].split(',')[0].replace('.', '')) + float(f"0.{line_item['amount'].split(',')[1]}")
+    except ValueError:
+        # amount = '' when parsing soge docs -> value is at the end of extras
+        amount = int(line_item['extras'][-1].split(',')[0].replace('.', '')) + float(f"0.{line_item['extras'][-1].split(',')[1]}")
+        line_item['extras'] = line_item['extras'][:-1]
+
     operation = bank_operation_classifier(operation_txt)
+    
     if operation[1] == "credit":
         amount = -amount
 
-    if len(line_item) > 4:
-        extras = line_item[3:-1]
+    if len(line_item['extras']) > 0:
+        extras = line_item['extras']
     else:
         extras = []
 
@@ -191,49 +237,66 @@ def chunk_bank_statement_soge(file_path: Path):
     nouveau_solde = -1
     debit = -1
     credit = -1
-    sublines = []
+    line_items = {
+        "date": "",
+        "operation_text": "",
+        "amount": "",
+        "extras": []
+    }
     for page in pages:
         for line in page.page_content.split("\n"):
             if len(line) > 0:
-                is_beginning, date1, date2, operation_text, amount = extract_two_dates_operation_amount(line)
+                line_split = extract_two_dates_operation_amount(line)
+                is_beginning, date1, operation_text, amount = line_split["is_beginning"], line_split["date1"], line_split["operation_text"], line_split["amount"]
                 if is_beginning:
                     if skip:
                         # header of new page, restart collection
                         skip=False
                     else:
                         # end of item
-                        append_line_item(line_item=sublines, lines=lines)
+                        append_line_item(line_item=line_items, lines=lines)
                         # split out first line of item into date1, date2, operation_text, amount
-                    sublines = [x for x in [date1, date2, operation_text, amount] if len(x) > 0]
-                elif "SOLDE PRÉCÉDENT" in line:
+                    line_items = {
+                        "date": date1,
+                        "operation_text": operation_text,
+                        "amount": amount,
+                        "extras": [],
+                    }
+                elif ("SOLDE PRÉCÉDENT" in line) or (("SOLDE CREDITEUR" in line) and (solde_precedent == -1)):
                     # absolute start
                     skip = False
                     solde_precedent = extract_amount_cents(line)
                     continue
                 else:
                     if skip:
-                        if "NOUVEAU SOLDE" in line:
+                        if ("NOUVEAU SOLDE" in line) or ("SOLDE CREDITEUR" in line):
                             nouveau_solde = extract_amount_cents(line)
                             break
                         else:
                             continue
                     else:
-                        if "suite >>>" in line:
+                        if ("suite >>>" in line) or ("16 bd des Italiens" in line):
                             # new page
-                            append_line_item(line_item=sublines, lines=lines)
-                            sublines = []
+                            # append_line_item(line_item=sublines, lines=lines)
+                            append_line_item(line_item=line_items, lines=lines)
+                            # sublines = []
+                            line_items = {
+                                "date": "",
+                                "operation_text": [],
+                                "amount": "",
+                            }
                             skip=True
                             continue
                         if "***" in line:
                             # end of month statement
                             continue
-                        if "TOTAUX" in line:
+                        if ("TOTAUX" in line) or ("TOTAL" in line):
                             # absolute end
-                            append_line_item(line_item=sublines, lines=lines)
+                            append_line_item(line_item=line_items, lines=lines)
                             debit, credit = extract_two_amounts_cents(line)
                             skip = True
                             continue
-                    sublines.append(line)
+                    line_items['extras'].append(line)
     return {
         "solde_precedent": solde_precedent,
         "nouveau_solde": nouveau_solde,
@@ -247,7 +310,8 @@ if __name__ == "__main__":
     # chunks = chunk_pdf("/Users/eliottlegendre/Documents/prive/evolution_naturejournal_leeCronin_2023.pdf")
     # chunks = chunk_pdf(Path("/Users/eliottlegendre/Library/CloudStorage/Box-Box/PRO/OTTILE/2024/URSSAF courrier 1.pdf"))
     
-    chunks = chunk_bank_statement_soge("data/bank_statement.pdf")
+    # chunks = chunk_bank_statement_soge("data/bank_statement.pdf")
+    chunks = chunk_bank_statement_soge("data/releve_bnp.pdf")
     solde_precedent = chunks["solde_precedent"]
     nouveau_solde = chunks["nouveau_solde"]
     lines = chunks["lines"]
