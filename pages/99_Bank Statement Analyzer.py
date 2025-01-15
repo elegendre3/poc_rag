@@ -3,6 +3,8 @@ import requests
 
 import numpy as np
 import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
 st.set_page_config(page_title='Bank Statement Analyzer', page_icon='data/alkane_logo.png', layout="wide")
@@ -13,7 +15,43 @@ PDFS_ROOT = DATA_ROOT / "pdfs"
 MODEL = "llama3.2"
 FASTAPI_ENDPOINT = "http://localhost:4557"
 
-import streamlit as st
+
+def create_operation_pie_chart(df, title="Operations Distribution"):
+    """
+    Create a pie chart of operations using the same color scheme
+    """
+    # Colors dictionary (same as legend)
+    colors = {
+        'paiement carte': '#FFE6E6',  # light red
+        'prelevement': '#E6FFE6',     # light green
+        'virement': '#E6E6FF',        # light blue
+        'remise cheque': '#FFFDE6',   # light yellow
+        'frais carte': '#FFE6FF',     # light purple
+        'emprunt': '#E6FFFE',         # light cyan
+        'autre': '#F2F2F2'  
+    }
+    
+    # Aggregate by Operation
+    operation_totals = df.groupby('Operation')['Amount'].sum().reset_index()
+    
+    # Create pie chart
+    fig = go.Figure(data=[go.Pie(
+        labels=operation_totals['Operation'],
+        values=operation_totals['Amount'],
+        marker_colors=[colors.get(op.lower(), '#FFFFFF') for op in operation_totals['Operation']],
+        hovertemplate="<b>%{label}</b><br>" +
+                      "Amount: %{value:.2f}€<br>" +
+                      "<extra></extra>"
+    )])
+    
+    fig.update_layout(
+        title=title,
+        showlegend=True,
+        width=800,
+        height=500
+    )
+    return fig
+
 
 def display_operation_legend():
     """Display color legend for operation types"""
@@ -145,8 +183,6 @@ def main():
         st.write(f'Debits: [{chunks["debit"]}] - Credits: [{chunks["credit"]}]')
     
         
-        # context = "  \n".join(chunks['lines'])
-        # question = st.text_input(label='Ask your question', value="What is the most likely type of document?")
         credits, debits = [], []
         for c in chunks['lines']:
             if len(c) == 0:
@@ -178,6 +214,10 @@ def main():
         st.markdown("**Debits**")
         st.dataframe(debits_styled, use_container_width=True)
 
+        # Pie Chart
+        st.markdown("### Expenses Distribution")
+        st.plotly_chart(create_operation_pie_chart(debits_df, f"Total expenses [{chunks['debit']}]"), use_container_width=True)
+
 
         if not np.abs((total_credit + chunks["credit"])) < 1.0:     
                 st.markdown("**Credits**")
@@ -189,6 +229,11 @@ def main():
                     st.error(f"Total credit mismatch: [{total_credit}] vs [{chunks['credit']}]")
                 if not np.abs((total_debit - chunks["debit"])) < 1.0:
                     st.error(f"Total debit mismatch: [{total_debit}] vs [{chunks['debit']}]")
+
+
+
+            # context = "  \n".join(chunks['lines'])
+            # question = st.text_input(label='Ask your question', value="What is the most likely type of document?")
 
             # context = c
             # question = "Réponds par 'Credit' ou 'Debit', Cette ligne de mon relevé de banque représente-t-elle un débit ou un crédit? Si c'est une dépense, de quelle type s'agit-il? Choisis une seule catégorie parmi: 'Alimentation', 'Transport', 'Logement', 'Loisirs', 'Santé', 'Education', 'Autre'."

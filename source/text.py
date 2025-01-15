@@ -169,7 +169,7 @@ def bank_operation_classifier(text: str) -> Tuple[str, str]:
     lower_text = text.lower()
     if ("prelevement" in lower_text) or ("prlv" in lower_text):
         return ("prelevement", "debit")
-    elif ("vir perm" in lower_text) or (("vir faveur tiers" in lower_text)):
+    elif ("vir perm" in lower_text) or (("virement faveur tiers" in lower_text)):
         return ("virement", "debit")
     elif ("vir recu" in lower_text) or ("vir sepa recu" in lower_text) or ("vir cpte a cpte recu" in lower_text):
         return ("virement", "credit")
