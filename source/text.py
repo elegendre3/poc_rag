@@ -34,7 +34,6 @@ def chunk_text(text: str, chunk_size: int = 512, overlap: int = 50) -> List[str]
         start += chunk_size - overlap
     return chunks
 
-
 def chunk_pdf(file_path: Path, chunk_size: int = 512, overlap: int = 50) -> List[str]:
     pages = load_pdf(file_path)
     if len(pages) == 0:
@@ -161,30 +160,37 @@ def is_line_beginning_of_item(text: str) -> bool:
    return bool(match)
 
 
-def bank_operation_classifier(text: str) -> Tuple[str, str]:
+def bank_operation_classifier(text: str) -> Tuple[str, str, str]:
     """
     Classify bank operation type
     - SOCIETE GENERALE
+    - BNP
     """
     lower_text = text.lower()
     if ("prelevement" in lower_text) or ("prlv" in lower_text):
-        return ("prelevement", "debit")
+        if ("edf" in lower_text):
+            return ("prelevement", "EDF", "debit")
+        elif ("sfr" in lower_text):
+            return ("prelevement", "Internet", "debit")
+        elif ("cardif" in lower_text):
+            return ("prelevement", "Assurance Habitation", "debit")            
+        return ("prelevement", "prelevement", "debit")
     elif ("vir perm" in lower_text) or (("virement faveur tiers" in lower_text)):
-        return ("virement", "debit")
+        return ("virement", "virement", "debit")
     elif ("vir recu" in lower_text) or ("vir sepa recu" in lower_text) or ("vir cpte a cpte recu" in lower_text):
-        return ("virement", "credit")
+        return ("virement", "virement", "credit")
     elif "remise cheque" in lower_text:
-        return ("remise cheque", "credit")
+        return ("remise cheque", "remise cheque", "credit")
     elif ("cotisation jazz" in lower_text) or ("option tranquillite" in lower_text) or ("commissions cotisation" in lower_text):
-        return ("frais carte", "debit")
+        return ("frais carte", "frais carte", "debit")
     # elif ("retrait" in lower_text) or ("dab" in lower_text):
     #     return ("retrait", "debit")
     elif ("echeance pret" in lower_text):
-        return ("emprunt", "debit")
+        return ("emprunt", "Emprunt", "debit")
     if ("carte" in lower_text) or ("du" in lower_text):
-        return ("paiement carte", "debit")
+        return ("paiement carte", "Autre", "debit")
     else:
-        return ("autre", "debit")
+        return ("autre", "Autre", "debit")
 
 
 def append_line_item(line_item: Dict, lines: List) -> List:
@@ -208,7 +214,7 @@ def append_line_item(line_item: Dict, lines: List) -> List:
 
     operation = bank_operation_classifier(operation_txt)
     
-    if operation[1] == "credit":
+    if operation[2] == "credit":
         amount = -amount
 
     if len(line_item['extras']) > 0:
@@ -220,7 +226,8 @@ def append_line_item(line_item: Dict, lines: List) -> List:
         {
             "date": date,
             "operation": operation[0],
-            "debit_credit": operation[1],
+            "category": operation[1],
+            "debit_credit": operation[2],
             "amount": amount,
             "operation_txt": operation_txt,
             "extras": extras
@@ -311,7 +318,7 @@ if __name__ == "__main__":
     # chunks = chunk_pdf(Path("/Users/eliottlegendre/Library/CloudStorage/Box-Box/PRO/OTTILE/2024/URSSAF courrier 1.pdf"))
     
     # chunks = chunk_bank_statement_soge("data/bank_statement.pdf")
-    chunks = chunk_bank_statement_soge("data/releve_bnp.pdf")
+    chunks = chunk_bank_statement_soge("data/pdfs/releve_bnp.pdf")
     solde_precedent = chunks["solde_precedent"]
     nouveau_solde = chunks["nouveau_solde"]
     lines = chunks["lines"]
