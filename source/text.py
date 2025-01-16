@@ -78,7 +78,8 @@ def extract_amount_cents(text: str) -> int:
     """
     # pattern = r'(\d+[.,\d]*\d+),(\d{2})$'
     # pattern = r'(\d+(?:[ \.]\d{3})*)[,\.]\s*(\d{2})$'
-    pattern = r'(\d{2}[./]\d{2}[./]\d{4})\s+(\d+(?:[ \.]\d{3})*)[,\.]\s*(\d{2})$'
+    # pattern = r'(\d{2}[./]\d{2}[./]\d{4})\s+[+ ]?(\d+(?:[ \.]\d{3})*)[,\.]\s*(\d{2})$'
+    pattern = r'(\d{2}[./]\d{2}[./]\d{4})\s+\+?\s?(\d+(?:[ \.]\d{3})*)[,\.]\s*(\d{2})$'
     match = re.search(pattern, text)
     if match:
         whole_part = match.group(2).replace('.', '').replace(' ', '')  # Remove thousand separators
@@ -235,9 +236,9 @@ def append_line_item(line_item: Dict, lines: List) -> List:
     )
     return lines
 
-def chunk_bank_statement_soge(file_path: Path):
+def chunk_bank_statement(file_path: Path):
     pages = load_pdf(file_path)
-
+    
     lines = []
     skip = True
     solde_precedent = -1
@@ -317,8 +318,8 @@ if __name__ == "__main__":
     # chunks = chunk_pdf("/Users/eliottlegendre/Documents/prive/evolution_naturejournal_leeCronin_2023.pdf")
     # chunks = chunk_pdf(Path("/Users/eliottlegendre/Library/CloudStorage/Box-Box/PRO/OTTILE/2024/URSSAF courrier 1.pdf"))
     
-    # chunks = chunk_bank_statement_soge("data/bank_statement.pdf")
-    chunks = chunk_bank_statement_soge("data/pdfs/releve_bnp.pdf")
+    # chunks = chunk_bank_statement("data/pdfs/bank_statement.pdf")
+    chunks = chunk_bank_statement("data/pdfs/releve_bnp.pdf")
     solde_precedent = chunks["solde_precedent"]
     nouveau_solde = chunks["nouveau_solde"]
     lines = chunks["lines"]

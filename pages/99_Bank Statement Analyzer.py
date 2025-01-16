@@ -77,9 +77,9 @@ def display_operation_legend():
 
     # Create two columns for layout
     col1, col2 = st.columns(2)
-    
+    half_point = (len(CATEGORY_COLORS) // 2)
     with col1:
-        for op, color in list(CATEGORY_COLORS.items())[:3]:
+        for op, color in list(CATEGORY_COLORS.items())[:half_point]:
             st.markdown(
                 f"""
                 <div style="
@@ -101,7 +101,7 @@ def display_operation_legend():
             )
     
     with col2:
-        for op, color in list(CATEGORY_COLORS.items())[3:]:
+        for op, color in list(CATEGORY_COLORS.items())[half_point:]:
             st.markdown(
                 f"""
                 <div style="
@@ -310,29 +310,29 @@ def main():
 
 
 
-    category, color = "paiement carte", CATEGORY_COLORS["paiement carte"]
-    cats_df = debits_df[debits_df["Operation"] == category].reset_index(drop=True)
-    categories = categorize_transactions(cats_df, color, EXPENSE_CATEGORIES)
+        category, color = "paiement carte", CATEGORY_COLORS["paiement carte"]
+        cats_df = debits_df[debits_df["Operation"] == category].reset_index(drop=True)
+        categories = categorize_transactions(cats_df, color, EXPENSE_CATEGORIES)
 
-    if categories:
-        st.success("Categories updated!")
-        cats_df['Category'] = categories
-        concat_expenses = pd.concat([debits_df[debits_df['Operation'] != category], cats_df])
+        if categories:
+            st.success("Categories updated!")
+            cats_df['Category'] = categories
+            concat_expenses = pd.concat([debits_df[debits_df['Operation'] != category], cats_df])
 
-        # Pie Chart
-        st.markdown("### Expenses Distribution")
-        c1, c2 = st.columns([1, 1])
-        c1.plotly_chart(create_operation_pie_chart(cats_df, f"Card expenses [{int(cats_df['Amount'].sum())}]", column="Category"))
-        c2.plotly_chart(create_operation_pie_chart(concat_expenses, f"Total expenses [{int(concat_expenses['Amount'].sum())}]", column="Category"))
+            # Pie Chart
+            st.markdown("### Expenses Distribution")
+            c1, c2 = st.columns([1, 1])
+            c1.plotly_chart(create_operation_pie_chart(cats_df, f"Card expenses [{int(cats_df['Amount'].sum())}]", column="Category"))
+            c2.plotly_chart(create_operation_pie_chart(concat_expenses, f"Total expenses [{int(concat_expenses['Amount'].sum())}]", column="Category"))
 
-        # statement_date = pd.to_datetime(credits_df['Date'].iloc[0])
-        statement_date = pd.to_datetime("today")
-        excel_file = export_to_excel(
-            credits_df, 
-            concat_expenses, 
-            statement_date,
-        )
-        st.success(f"Excel report exported: {excel_file}")
+            # statement_date = pd.to_datetime(credits_df['Date'].iloc[0])
+            statement_date = pd.to_datetime("today")
+            excel_file = export_to_excel(
+                credits_df, 
+                concat_expenses, 
+                statement_date,
+            )
+            st.success(f"Excel report exported: {excel_file}")
 
 
             # context = "  \n".join(chunks['lines'])

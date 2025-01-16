@@ -24,7 +24,7 @@ from source.rag import (
     question_answering_prompt,
 )
 from source.text import (
-    chunk_bank_statement_soge,
+    chunk_bank_statement,
     chunk_pdf,
     load_pdf,
 )
@@ -95,10 +95,10 @@ class Model:
         except UnauthorizedException as e:
             raise HTTPException(status_code=401, detail=f"Unauthorized - Check Pinecone API Key: {str(e)}")
 
-    def chunk_bank_statement(self, pdf_filepath):
+    def chunk_statement(self, pdf_filepath):
         logging.info(f"Loading [{pdf_filepath}]")
         try:
-            chunks = chunk_bank_statement_soge(pdf_filepath)
+            chunks = chunk_bank_statement(pdf_filepath)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error chunking bank Statement: {str(e)}")
         return chunks
@@ -301,10 +301,10 @@ def set_to_not_ready():
 
 
 @app.post("/chunk_bank_statement")
-def chunk_bank_statement(pdf_filepath: str):
+def chunk_statement(pdf_filepath: str):
     # pdf_filepath = "data/pdfs/bank_statement.pdf"
     try:
-        response = pdf_model.chunk_bank_statement(Path(pdf_filepath))
+        response = pdf_model.chunk_statement(Path(pdf_filepath))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error loading PDF: {str(e)}")
     return {"data": response}
