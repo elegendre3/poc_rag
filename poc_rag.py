@@ -19,6 +19,7 @@ def homepage_content():
     col1, col2 = st.columns([1, 10])
     col1.image("data/alkane_logo.png", width=100)
     col2.header("Welcome to the RAG LLM Demo Page")
+    st.title("RAG LLM")
 
     # Sanity Checks
     with st.spinner("Application starting.."):
@@ -72,7 +73,7 @@ def homepage_content():
         if uploaded_file is not None:
             start = datetime.now()
             with st.spinner('Asking the model ..'):
-                response = requests.post(f"{FASTAPI_ENDPOINT}/ask", params={"questions": question})
+                response = requests.post(f"{FASTAPI_ENDPOINT}/qa_doc", params={"questions": question})
             end = datetime.now()
             if response.status_code == 200:
                 st.markdown(response.json()['message'])

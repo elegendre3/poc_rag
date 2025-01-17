@@ -24,7 +24,6 @@ from source.rag import (
     question_answering_prompt,
 )
 from source.text import (
-    chunk_bank_statement,
     chunk_pdf,
     load_pdf,
 )
@@ -34,6 +33,7 @@ from source.vector_store import (
     create_retriever_pinecone,
     delete_index_pinecone,
 )
+from source.doc_classification import doc_classification_pipeline
 
 
 class Settings(BaseSettings):
@@ -94,14 +94,6 @@ class Model:
             self.retriever = create_retriever_pinecone(self.vectorstore)
         except UnauthorizedException as e:
             raise HTTPException(status_code=401, detail=f"Unauthorized - Check Pinecone API Key: {str(e)}")
-
-    def chunk_statement(self, pdf_filepath):
-        logging.info(f"Loading [{pdf_filepath}]")
-        try:
-            chunks = chunk_bank_statement(pdf_filepath)
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error chunking bank Statement: {str(e)}")
-        return chunks
         
     def load_pdf(self, pdf_filepath):
         logging.info(f"Loading [{pdf_filepath}]")
@@ -136,7 +128,7 @@ class Model:
         self.is_ready = True
         return None
     
-    def ask(self, questions: str):
+    def qa_doc(self, questions: str):
         if not self.is_ready:
             raise Exception("Model not ready - either no pdf or no model loaded")
         output = ""
@@ -159,16 +151,10 @@ class Model:
             logging.info("Model not loaded - waiting..")
             time.sleep(5)
             return {"result": "Model not loaded, retry"}
-            # self.load_models()
-            # raise Exception("Model not loaded")
         prompt = question_answering_prompt() 
         model = self.model 
         parser = StrOutputParser()
-        print(f'Prompt: {prompt}')
-        print(f'Model: {model}')
-        print(f'Parser: {parser}')
         chain = prompt | model | parser
-        # chain =  question_answering_prompt() | pdf_model.model | StrOutputParser()
         response = chain.invoke({"context": context, "question": question})
         return {"result": response}
 
@@ -206,6 +192,18 @@ class Model:
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error with PINECONE API Key: {str(e)}")
         return None
+
+    def classify_document(self, file_name: str):
+        start = datetime.now()
+        response = doc_classification_pipeline(file_name, self.model, self.embeddings)
+        end = datetime.now()
+        seconds = int((end - start).total_seconds()) % 60
+        all_minutes = int((end - start).total_seconds()) // 60
+        hours = all_minutes // 60
+        minutes = all_minutes % 60
+        logging.info(f"Time elapsed: [{hours}:{minutes}:{seconds}]")
+        return {"time_elapsed": f"{hours}:{minutes}:{seconds}", "result": response}
+
 
 # Define stateful objects
 settings = Settings()
@@ -293,37 +291,23 @@ def update_pinecone_api_key(api_key: str):
     pdf_model.update_pinecone_api_key(api_key)
     return {"message": f"Updated Pinecone API key"}
 
-
 @app.post("/set_to_not_ready")
 def set_to_not_ready():
     pdf_model.set_to_not_ready()
     return {"message": f"Set model status to [{pdf_model.is_ready}]"}
 
-
-@app.post("/chunk_bank_statement")
-def chunk_statement(pdf_filepath: str):
-    # pdf_filepath = "data/pdfs/bank_statement.pdf"
-    try:
-        response = pdf_model.chunk_statement(Path(pdf_filepath))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error loading PDF: {str(e)}")
-    return {"data": response}
-
-
 @app.post("/load_pdf")
 def load_pdf_file(pdf_filepath: str):
-    # pdf_filepath = "data/pdfs/CDI Eliott LEGENDRE.pdf"
     try:
         pdf_model.load_pdf(Path(pdf_filepath))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error loading PDF: {str(e)}")
     return {"message": f"Loaded PDF [{pdf_filepath}]"}
 
-
 @sleep_and_retry
 @limits(calls=settings.max_calls_per_minute, period=settings.ratelimit_oneminute)
-@app.post("/ask")
-def ask_model(questions: str):
+@app.post("/qa_doc")
+def qa_doc(questions: str):
     try:
         result = pdf_model.ask(questions)
     except Exception as e:
@@ -334,10 +318,14 @@ def ask_model(questions: str):
 @limits(calls=settings.max_calls_per_minute, period=settings.ratelimit_oneminute)
 @app.post("/ask_with_context")
 def ask_model_with_context(context: str, question: str):
-    # try:
     result = pdf_model.ask_with_context(context, question)
-    # except Exception as e:
-        # raise HTTPException(status_code=500, detail=f"Error querying model: {str(e)}")
+    return {"message": result["result"]}
+
+@sleep_and_retry
+@limits(calls=settings.max_calls_per_minute, period=settings.ratelimit_oneminute)
+@app.post("/classify_document")
+def classify_document(pdf_filepath: str):
+    result = pdf_model.classify_document(pdf_filepath)
     return {"message": result["result"]}
 
 @app.post("/delete_index")
