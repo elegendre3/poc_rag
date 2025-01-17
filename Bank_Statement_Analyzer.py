@@ -1,5 +1,4 @@
 from pathlib import Path
-import requests
 
 import numpy as np
 import pandas as pd
@@ -7,13 +6,13 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
+from source.text import chunk_bank_statement
+
 st.set_page_config(page_title='Bank Statement Analyzer', page_icon='data/alkane_logo.png', layout="wide")
 
 
 DATA_ROOT = Path('data')
 PDFS_ROOT = DATA_ROOT / "pdfs"
-MODEL = "llama3.2"
-FASTAPI_ENDPOINT = "http://localhost:4557"
 
 CATEGORY_COLORS = {
         'paiement carte': '#FFE6E6',        # light red
@@ -213,21 +212,6 @@ def export_to_excel(credits_df, debits_df, statement_date):
 def main():
     st.title("Bank Statement Analyzer")
 
-    col1, col2 = st.columns([1, 10])
-
-    # Sanity Checks
-    with st.spinner("Application starting.."):
-        api_keys_set = requests.get(f"{FASTAPI_ENDPOINT}/are_api_keys_set").json()['message']
-        if not api_keys_set:
-            st.warning("Please set your API keys in the Credentials page before proceeding.")
-            st.stop()
-        
-        model_healthy = requests.get(f"{FASTAPI_ENDPOINT}/health")
-        if model_healthy.status_code == 401:
-            st.warning("Unauthorized - Model cannot be intialized.\nPlease check your API keys in the Credentials page.")
-            st.stop()
-    # 
-
     # Upload PDF file
     col11, col22 = st.columns([2, 2])
     col11.markdown("**Your uploaded file:**")
@@ -246,18 +230,14 @@ def main():
                 pdf_filepath.unlink()
                 with open(pdf_filepath, "wb") as f:
                     f.write(uploaded_file.getbuffer())
-                requests.post(f"{FASTAPI_ENDPOINT}/set_to_not_ready")
         
         with st.spinner('Chunking the PDF ..'):
             st.markdown(str(pdf_filepath))
-            response = requests.post(f"{FASTAPI_ENDPOINT}/chunk_bank_statement", params={"pdf_filepath": str(pdf_filepath)})
+            chunks = chunk_bank_statement(pdf_filepath)
         
         st.write('---')
-        chunks = response.json()['data']
         st.write(f'Solde Precedent [{chunks["solde_precedent"]}]')
-        st.write(f'Nouveau Solde [{chunks["nouveau_solde"]}]')
-        # st.write(f'Debits: [{chunks["debit"]}] - Credits: [{chunks["credit"]}]')
-    
+        st.write(f'Nouveau Solde [{chunks["nouveau_solde"]}]')    
         
         credits, debits = [], []
         for c in chunks['lines']:
@@ -272,12 +252,10 @@ def main():
         credits_df = pd.DataFrame(credits, columns=["Date", "Operation", "Category", "Amount", "Operation Text", "Extras"])
         credits_df = credits_df.sort_values(by=["Amount", "Date"], ascending=True)
         total_credit = credits_df["Amount"].sum()
-        # credits_df.loc["Total"] = credits_df.sum(numeric_only=True)
 
         debits_df = pd.DataFrame(debits, columns=["Date", "Operation", "Category", "Amount", "Operation Text", "Extras"])
         debits_df = debits_df.sort_values(by=["Amount", "Date"], ascending=False)
         total_debit = debits_df["Amount"].sum()
-        # debits_df.loc["Total"] = debits_df.sum(numeric_only=True)
 
         # Apply styling to DataFrames
         credits_styled = credits_df.style.apply(color_rows_by_operation, axis=1).format({'Amount': '{:.2f}'})
@@ -332,26 +310,17 @@ def main():
                 concat_expenses, 
                 statement_date,
             )
-            st.success(f"Excel report exported: {excel_file}")
+            st.success(f"Excel report ready: {excel_file}")
 
-
-            # context = "  \n".join(chunks['lines'])
-            # question = st.text_input(label='Ask your question', value="What is the most likely type of document?")
-
-            # context = c
-            # question = "Réponds par 'Credit' ou 'Debit', Cette ligne de mon relevé de banque représente-t-elle un débit ou un crédit? Si c'est une dépense, de quelle type s'agit-il? Choisis une seule catégorie parmi: 'Alimentation', 'Transport', 'Logement', 'Loisirs', 'Santé', 'Education', 'Autre'."
-            # response = requests.post(
-            #     f"{FASTAPI_ENDPOINT}/ask_with_context", 
-            #     params={"context": context, "question": question},
-            # )
-            # if response.status_code == 200:
-            #     st.markdown(f"Context:")
-            #     st.markdown(context)
-            #     # st.markdown(f"**Question: {question}:**")
-            #     st.write(response.json()['message'])
-            #     st.write('---')
-
-
+            with open(excel_file, 'rb') as f:
+                file_bytes = f.read()
+            
+            st.download_button(
+                label="📥 Download Excel Report",
+                data=file_bytes,
+                file_name=f"bank_statement_analysis_{statement_date.strftime('%Y%m%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
 
 
 if __name__ == "__main__":
