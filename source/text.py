@@ -127,12 +127,13 @@ def extract_two_dates_operation_amount(text: str) -> Tuple[int, int]:
             "amount": amount
         }
     else:
-        bnp_pattern = r'^(\d{2}\.\d{2})\s+(\d{2}\.\d{2})\s*(\d+,\d{2})?(.+)?$'
+        # bnp_pattern = r'^(\d{2}\.\d{2})\s+(\d{2}\.\d{2})\s*(\d+,\d{2})?(.+)?$'
+        bnp_pattern = r'^(\d{2}\.\d{2})\s+(\d{2}\.\d{2})\s*(\d+(?:[ \.]\d{3})*,\d{2})?(.+)?$'
         match = re.match(bnp_pattern, text)
         if match:
             date1 = match.group(1)
             date2 = match.group(2)
-            amount = match.group(3)
+            amount = match.group(3).replace(' ', '') if match.group(3) else ''
             operation_text = match.group(4) or ''
             # return True, date1, date2, operation_text, amount
             return {
@@ -160,7 +161,6 @@ def is_line_beginning_of_item(text: str) -> bool:
    match = re.match(pattern, text)
    return bool(match)
 
-
 def bank_operation_classifier(text: str) -> Tuple[str, str, str]:
     """
     Classify bank operation type
@@ -176,23 +176,26 @@ def bank_operation_classifier(text: str) -> Tuple[str, str, str]:
         elif ("cardif" in lower_text):
             return ("prelevement", "Assurance Habitation", "debit")            
         return ("prelevement", "prelevement", "debit")
-    elif ("vir perm" in lower_text) or (("virement faveur tiers" in lower_text)):
+    elif ("vir perm" in lower_text) or ("virement faveur tiers" in lower_text) or ("vir cpte a cpte emis" in lower_text):
         return ("virement", "virement", "debit")
+    elif ("vir" in lower_text) and (("inst" in lower_text)):
+        return ("virement", "virement instantane", "debit")
     elif ("vir recu" in lower_text) or ("vir sepa recu" in lower_text) or ("vir cpte a cpte recu" in lower_text):
         return ("virement", "virement", "credit")
     elif "remise cheque" in lower_text:
         return ("remise cheque", "remise cheque", "credit")
-    elif ("cotisation jazz" in lower_text) or ("option tranquillite" in lower_text) or ("commissions cotisation" in lower_text):
+    elif ("cotisation jazz" in lower_text) or ("option tranquillite" in lower_text) or ("commissions cotisation" in lower_text) or ("frais tenue de compte" in lower_text):
         return ("frais carte", "frais carte", "debit")
     # elif ("retrait" in lower_text) or ("dab" in lower_text):
     #     return ("retrait", "debit")
     elif ("echeance pret" in lower_text):
         return ("emprunt", "Emprunt", "debit")
-    if ("carte" in lower_text) or ("du" in lower_text):
+    elif ("rembourst cb" in lower_text):
+        return ("remboursement", "Autre", "credit")
+    elif ("carte" in lower_text) or ("du" in lower_text):
         return ("paiement carte", "Autre", "debit")
     else:
         return ("autre", "Autre", "debit")
-
 
 def append_line_item(line_item: Dict, lines: List) -> List:
     """
@@ -235,6 +238,7 @@ def append_line_item(line_item: Dict, lines: List) -> List:
         }
     )
     return lines
+
 
 def chunk_bank_statement(file_path: Path):
     pages = load_pdf(file_path)
@@ -318,8 +322,9 @@ if __name__ == "__main__":
     # chunks = chunk_pdf("/Users/eliottlegendre/Documents/prive/evolution_naturejournal_leeCronin_2023.pdf")
     # chunks = chunk_pdf(Path("/Users/eliottlegendre/Library/CloudStorage/Box-Box/PRO/OTTILE/2024/URSSAF courrier 1.pdf"))
     
-    # chunks = chunk_bank_statement("data/pdfs/bank_statement.pdf")
-    chunks = chunk_bank_statement("data/pdfs/releve_bnp.pdf")
+    chunks = chunk_bank_statement("data/pdfs/bank_statement.pdf")
+    # chunks = chunk_bank_statement("data/pdfs/releve_bnp.pdf")
+    # chunks = chunk_bank_statement("data/pdfs/jul_bnp.pdf")
     solde_precedent = chunks["solde_precedent"]
     nouveau_solde = chunks["nouveau_solde"]
     lines = chunks["lines"]

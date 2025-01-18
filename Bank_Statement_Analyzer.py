@@ -26,21 +26,24 @@ CATEGORY_COLORS = {
         'restaurant': '#B3FFB3',            # mint green
         'loisirs': '#E6B3FF',               # lavender
         'santé': '#E6FFFE',                 # light cyan
-        'voyage': '#B3E6FF',                # sky blue
-        'logement': '#CCFFCC',              # pale green
+        'vacances': '#B3E6FF',                # sky blue
+        'esthetique': '#CCFFCC',              # pale green
         'edf': '#FFB3B3',                   # salmon
         'internet': '#CCE6FF',              # baby blue
         'assurance habitation': '#FFCCFF',  # pink
-        'utilities': '#E6FFCC',             # lime
+        'fringues': '#E6FFCC',             # lime
         'xx': '#FFE6CC',                    # peach
     }
 
 EXPENSE_CATEGORIES = [
     "Alimentation",
     "Restaurant",
-    "Voyage",
+    "Transport",
+    "Vacances",
     "Loisirs",
     "Santé",
+    "Esthetique",
+    "Fringues",
     "Autre",
 ]
 
@@ -197,6 +200,12 @@ def export_to_excel(credits_df, debits_df, statement_date):
     credits_worksheet = writer.sheets['Credits']
     credits_worksheet.write('A1', f'Credits Analysis - {statement_date.strftime("%B %Y")}', header_format)
     
+    # Write Analysis sheet
+    grouped_expenses = debits_df.groupby('Category')['Amount'].sum().reset_index().sort_values(by='Amount', ascending=False).reset_index(drop=True)
+    grouped_expenses.to_excel(writer, sheet_name='Analysis', startrow=2, index=False)
+    analyis_worksheet = writer.sheets['Analysis']
+    analyis_worksheet.write('A1', f'Expenses Grouped Analysis - {statement_date.strftime("%B %Y")}', header_format)
+
     # Format columns
     for worksheet in [credits_worksheet, debits_worksheet]:
         worksheet.set_column('A:A', 12)  # Date
@@ -204,7 +213,32 @@ def export_to_excel(credits_df, debits_df, statement_date):
         worksheet.set_column('C:C', 12)  # Amount
         worksheet.set_column('D:D', 40)  # Operation Text
         worksheet.set_column('E:E', 20)  # Extras
-    
+
+    # add expenses pie chart
+    expenses_chart = workbook.add_chart({'type': 'pie'})
+    expenses_chart.add_series({
+        'categories': f'=Analysis!$A$3:$A${len(grouped_expenses) + 2}',
+        'values': f'=Analysis!$B$3:$B${len(grouped_expenses) + 2}',
+        'data_labels': {'percentage': True}
+    })
+    expenses_chart.set_title({'name': 'Expenses Distribution'})
+    expenses_chart.set_size({'width': 500, 'height': 400})
+    expenses_chart.set_legend({'position': 'bottom'})
+    expenses_chart.set_style(10)
+    expenses_chart.set_table({
+        'show_keys': True,
+        'show_series_key': True,
+        'show_category_key': True,
+        'show_value': True,
+        'show_percentage': True,
+        'font': {'bold': True}
+    })
+    expenses_chart.set_title({
+        'name': 'Expenses Distribution',
+        'name_font': {'bold': True, 'italic': True}
+    })
+    analyis_worksheet.insert_chart('F2', expenses_chart, {'x_offset': 25, 'y_offset': 10}) 
+
     writer.close()
     return filename
 
