@@ -36,7 +36,7 @@ def chunk_text(text: str, chunk_size: int = 512, overlap: int = 50) -> List[str]
 
 def chunk_pdf(file_path: Path, chunk_size: int = 512, overlap: int = 50) -> List[str]:
     pages = load_pdf(file_path)
-    if len(pages) == 0:
+    if (len(pages) == 0) or ('/UNIC' in pages[0].page_content):
         logging.info('Warning: PDF has no text layer')
         logging.info('OCRing..')
         if ".pdf" == file_path.as_posix()[-4:]:
@@ -255,60 +255,62 @@ def chunk_bank_statement(file_path: Path):
         "amount": "",
         "extras": []
     }
-    for page in pages:
-        for line in page.page_content.split("\n"):
-            if len(line) > 0:
-                line_split = extract_two_dates_operation_amount(line)
-                is_beginning, date1, operation_text, amount = line_split["is_beginning"], line_split["date1"], line_split["operation_text"], line_split["amount"]
-                if is_beginning:
-                    if skip:
-                        # header of new page, restart collection
-                        skip=False
-                    else:
-                        # end of item
-                        append_line_item(line_item=line_items, lines=lines)
-                        # split out first line of item into date1, date2, operation_text, amount
-                    line_items = {
-                        "date": date1,
-                        "operation_text": operation_text,
-                        "amount": amount,
-                        "extras": [],
-                    }
-                elif ("SOLDE PRÉCÉDENT" in line) or (("SOLDE CREDITEUR" in line) and (solde_precedent == -1)):
-                    # absolute start
-                    skip = False
-                    solde_precedent = extract_amount_cents(line)
-                    continue
+
+    pages_lines = [line for page in pages for line in page.page_content.split("\n")]
+    for line in pages_lines:
+        if len(line) > 0:
+            line_split = extract_two_dates_operation_amount(line)
+            is_beginning, date1, operation_text, amount = line_split["is_beginning"], line_split["date1"], line_split["operation_text"], line_split["amount"]
+            if is_beginning:
+                if skip:
+                    # header of new page, restart collection
+                    skip=False
                 else:
-                    if skip:
-                        if ("NOUVEAU SOLDE" in line) or ("SOLDE CREDITEUR" in line):
-                            nouveau_solde = extract_amount_cents(line)
-                            break
-                        else:
-                            continue
+                    # end of item
+                    append_line_item(line_item=line_items, lines=lines)
+                    # split out first line of item into date1, date2, operation_text, amount
+                line_items = {
+                    "date": date1,
+                    "operation_text": operation_text,
+                    "amount": amount,
+                    "extras": [],
+                }
+            elif ("SOLDE PRÉCÉDENT" in line) or (("SOLDE CREDITEUR" in line) and (solde_precedent == -1)):
+                # absolute start
+                skip = False
+                solde_precedent = extract_amount_cents(line)
+                continue
+            else:
+                if skip:
+                    if ("NOUVEAU SOLDE" in line) or ("SOLDE CREDITEUR" in line):
+                        nouveau_solde = extract_amount_cents(line)
+                        break
                     else:
-                        if ("suite >>>" in line) or ("16 bd des Italiens" in line):
-                            # new page
-                            # append_line_item(line_item=sublines, lines=lines)
-                            append_line_item(line_item=line_items, lines=lines)
-                            # sublines = []
-                            line_items = {
-                                "date": "",
-                                "operation_text": [],
-                                "amount": "",
-                            }
-                            skip=True
-                            continue
-                        if "***" in line:
-                            # end of month statement
-                            continue
-                        if ("TOTAUX" in line) or ("TOTAL" in line):
-                            # absolute end
-                            append_line_item(line_item=line_items, lines=lines)
-                            debit, credit = extract_two_amounts_cents(line)
-                            skip = True
-                            continue
-                    line_items['extras'].append(line)
+                        continue
+                else:
+                    if ("suite >>>" in line) or ("16 bd des Italiens" in line):
+                        # new page
+                        # append_line_item(line_item=sublines, lines=lines)
+                        append_line_item(line_item=line_items, lines=lines)
+                        # sublines = []
+                        line_items = {
+                            "date": "",
+                            "operation_text": [],
+                            "amount": "",
+                            "extras": [],
+                        }
+                        skip=True
+                        continue
+                    if "***" in line:
+                        # end of month statement
+                        continue
+                    if ("TOTAUX" in line) or ("TOTAL" in line):
+                        # absolute end
+                        append_line_item(line_item=line_items, lines=lines)
+                        debit, credit = extract_two_amounts_cents(line)
+                        skip = True
+                        continue
+                line_items['extras'].append(line)
     return {
         "solde_precedent": solde_precedent,
         "nouveau_solde": nouveau_solde,
@@ -322,9 +324,10 @@ if __name__ == "__main__":
     # chunks = chunk_pdf("/Users/eliottlegendre/Documents/prive/evolution_naturejournal_leeCronin_2023.pdf")
     # chunks = chunk_pdf(Path("/Users/eliottlegendre/Library/CloudStorage/Box-Box/PRO/OTTILE/2024/URSSAF courrier 1.pdf"))
     
-    chunks = chunk_bank_statement("data/pdfs/bank_statement.pdf")
+    # chunks = chunk_bank_statement("data/pdfs/bank_statement.pdf")
     # chunks = chunk_bank_statement("data/pdfs/releve_bnp.pdf")
     # chunks = chunk_bank_statement("data/pdfs/jul_bnp.pdf")
+    chunks = chunk_bank_statement("data/pdfs/tim_bnp.pdf")
     solde_precedent = chunks["solde_precedent"]
     nouveau_solde = chunks["nouveau_solde"]
     lines = chunks["lines"]
