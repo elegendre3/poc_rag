@@ -35,7 +35,8 @@ def main():
     col11, col22 = st.columns([2, 2])
     col11.markdown("**Your uploaded file:**")
     col111, col222 = col11.columns([2, 1])
-    uploaded_file = col22.file_uploader("Upload your PDF file", type="pdf")
+    uploaded_file = col22.file_uploader("Upload your PDF file", type=["pdf", "docx", "pptx"])
+    # uploaded_file = col22.file_uploader("Upload your PDF file")
 
     if uploaded_file is not None:
         col111.markdown(f"- File name: {uploaded_file.name}")

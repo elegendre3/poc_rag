@@ -3,11 +3,28 @@ from pathlib import Path
 import re
 from typing import (Dict, List, Tuple)
 
-from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.document_loaders import (
+    Docx2txtLoader,
+    PyPDFLoader,
+    UnstructuredPowerPointLoader,
+)
 
 
 def load_pdf(file_path: Path):
     loader = PyPDFLoader(file_path)
+    return loader.load_and_split()
+
+def load_docx(file_path: Path):
+    loader = Docx2txtLoader(file_path)
+    return loader.load_and_split()
+
+def load_pptx(file_path: Path):
+    # needs dependencies:
+    # >>> import nltk
+    # >>> nltk.download('punkt_tab')
+    # >>> nltk.download('averaged_perceptron_tagger_eng')
+
+    loader = UnstructuredPowerPointLoader(file_path.as_posix())
     return loader.load_and_split()
 
 
@@ -23,6 +40,9 @@ def chunk_text(text: str, chunk_size: int = 512, overlap: int = 50) -> List[str]
     Returns:
         List[str]: A list of text chunks.
     """
+
+    logging.warning("Think about using the existing formatting with [\n] to make better chunks")
+
     words = text.split()
     chunks = []
     start = 0
@@ -65,9 +85,23 @@ def chunk_pdf(file_path: Path, chunk_size: int = 512, overlap: int = 50) -> List
         # full_text = " ".join(flattened_list)
         # chunks = chunk_text(full_text, chunk_size=chunk_size, overlap=overlap)
         return flattened_list
+    
     text = "\n ".join([page.page_content for page in pages])
     chunks = chunk_text(text, chunk_size=chunk_size, overlap=overlap)
     return chunks
+
+def chunk_docx(file_path: Path, chunk_size: int = 512, overlap: int = 50) -> List[str]:
+    pages = load_docx(file_path)
+    text = "\n ".join([page.page_content for page in pages])
+    chunks = chunk_text(text, chunk_size=chunk_size, overlap=overlap)
+    return chunks
+
+def chunk_pptx(file_path: Path, chunk_size: int = 512, overlap: int = 50) -> List[str]:
+    pages = load_pptx(file_path)
+    text = "\n ".join([page.page_content for page in pages])
+    chunks = chunk_text(text, chunk_size=chunk_size, overlap=overlap)
+    return chunks
+
 
 def extract_amount_cents(text: str) -> int:
     """
@@ -323,20 +357,23 @@ if __name__ == "__main__":
     # chunks = chunk_pdf("data/CDI Eliott LEGENDRE.pdf")
     # chunks = chunk_pdf("/Users/eliottlegendre/Documents/prive/evolution_naturejournal_leeCronin_2023.pdf")
     # chunks = chunk_pdf(Path("/Users/eliottlegendre/Library/CloudStorage/Box-Box/PRO/OTTILE/2024/URSSAF courrier 1.pdf"))
-    
-    # chunks = chunk_bank_statement("data/pdfs/bank_statement.pdf")
-    # chunks = chunk_bank_statement("data/pdfs/releve_bnp.pdf")
-    # chunks = chunk_bank_statement("data/pdfs/jul_bnp.pdf")
-    chunks = chunk_bank_statement("data/pdfs/tim_bnp.pdf")
-    solde_precedent = chunks["solde_precedent"]
-    nouveau_solde = chunks["nouveau_solde"]
-    lines = chunks["lines"]
-    print('w')
-
-    # chunks = chunk_pdf(Path("data/bank_statement.pdf"))
     # for i, chunk in enumerate(chunks):
     #     print(f"Chunk [{i+1}]:\n{chunk}\n")
 
+
+    #  BANK STATEMENT
+    # chunks = chunk_bank_statement("data/pdfs/bank_statement.pdf")
+    # chunks = chunk_bank_statement("data/pdfs/releve_bnp.pdf")
+    # chunks = chunk_bank_statement("data/pdfs/jul_bnp.pdf")
+    # chunks = chunk_bank_statement("data/pdfs/tim_bnp.pdf")
+    # solde_precedent = chunks["solde_precedent"]
+    # nouveau_solde = chunks["nouveau_solde"]
+    # lines = chunks["lines"]
+    # print('w')
+
+    # doc = load_docx(Path("data/alkane/propositions_alkane/Proposition - Mission d'accompagnement ERP - Bredin Prat.docx"))
+    doc = load_pptx("data/alkane/propositions_alkane/Proposition d'accompagnement - Projet Temps - Darrois Villey.pptx")
+    print('w')
     # import easyocr
     # reader = easyocr.Reader(['fr','en']) # this needs to run only once to load the model into memory
     # result = reader.readtext('data/screen.png')
