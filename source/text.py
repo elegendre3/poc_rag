@@ -59,7 +59,8 @@ def chunk_pdf(file_path: Path, chunk_size: int = 512, overlap: int = 50) -> List
     if (len(pages) == 0) or ('/UNIC' in pages[0].page_content):
         logging.info('Warning: PDF has no text layer')
         logging.info('OCRing..')
-        if ".pdf" == file_path.as_posix()[-4:]:
+        # if ".pdf" == file_path.as_posix()[-4:]:
+        if ".pdf" == file_path.suffix:
             import fitz
             doc = fitz.open(file_path)
             zoom = 4

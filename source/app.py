@@ -24,7 +24,9 @@ from source.rag import (
     question_answering_prompt,
 )
 from source.text import (
+    chunk_docx,
     chunk_pdf,
+    chunk_pptx,
     load_pdf,
 )
 from source.vector_store import (
@@ -40,6 +42,7 @@ class Settings(BaseSettings):
     openai_api_key: Optional[str] = None
     pinecone_api_key: Optional[str] = None
     model_name: str = "llama3.2"
+    # model_name: str = "gpt-4o-mini"
     embeddings_dim: int = 1536
     chunk_size: int = 512
     chunk_overlap: int = 50
@@ -82,7 +85,8 @@ class Model:
     def init_vectorstore(self):
         self.index_name = "single-doc-index"
         try:
-            self.pc = Pinecone(api_key=self.settings.pinecone_api_key)
+            if self.pc is None:
+                self.pc = Pinecone(api_key=self.settings.pinecone_api_key)
 
             create_index_with_pinecone(self.pc, index_name=self.index_name, dimension=self.settings.embeddings_dim)
             self.index = self.pc.Index(self.index_name)
@@ -95,14 +99,21 @@ class Model:
         except UnauthorizedException as e:
             raise HTTPException(status_code=401, detail=f"Unauthorized - Check Pinecone API Key: {str(e)}")
         
-    def load_pdf(self, pdf_filepath):
-        logging.info(f"Loading [{pdf_filepath}]")
-        chunks = chunk_pdf(pdf_filepath, chunk_size=self.settings.chunk_size, overlap=self.settings.chunk_overlap)
-        logging.info(f"Excerpt: {str(chunks[0])[:200]}")
-        
+    def load_pdf(self, filepath):
+        logging.info(f"Loading [{filepath}]")
+
+        if filepath.suffix == ".pdf":
+            chunks = chunk_pdf(filepath, chunk_size=self.settings.chunk_size, overlap=self.settings.chunk_overlap)
+        elif filepath.suffix == ".docx":
+            chunks = chunk_docx(filepath, chunk_size=self.settings.chunk_size, overlap=self.settings.chunk_overlap)
+        elif filepath.suffix == ".pptx":
+            chunks = chunk_pptx(filepath, chunk_size=self.settings.chunk_size, overlap=self.settings.chunk_overlap)
+        else:
+            return "Only file type accepted for now: [PDF, DOCX, PPTX]"
+                
         logging.info(f"Vectorizing pdf..")
-        self.vectorize_pdf(str(pdf_filepath), chunks)
-        return {"file_name": pdf_filepath, "num_chunks": len(chunks)}
+        self.vectorize_pdf(str(filepath.stem), chunks)
+        return {"file_name": filepath.as_posix(), "num_chunks": len(chunks)}
     
     def load_pdf_inmem(self, pdf_filepath):
         logging.info(f"Loading [{pdf_filepath}]")
@@ -115,6 +126,10 @@ class Model:
 
     def vectorize_pdf(self, title: str, chunks: List[str]):
         documents = [Document(page_content=d, metadata={"title": title}) for d in chunks]
+        
+        # reset Pinecone index
+        create_index_with_pinecone(self.pc, index_name=self.index_name, dimension=self.settings.embeddings_dim)
+        
         init_vector_count = self.index.describe_index_stats()['total_vector_count']
         self.vectorstore.add_documents(documents=documents, ids=[str(uuid.uuid4()) for _ in range(len(documents))])
         logging.info('Indexing doc..')
@@ -309,7 +324,7 @@ def load_pdf_file(pdf_filepath: str):
 @app.post("/qa_doc")
 def qa_doc(questions: str):
     try:
-        result = pdf_model.ask(questions)
+        result = pdf_model.qa_doc(questions)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error creating PDF chain: {str(e)}")
     return {"message": result["result"]}

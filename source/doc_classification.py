@@ -49,17 +49,19 @@ def doc_classification_pipeline(file_name: str, model, embeddings) -> str:
     seed = 22
     num_clusters = 4
     num_samples_per_cluster = 1
-    
+    chunk_size = 256
+    overlap = 50
+
     filepath = Path(file_name)
     if filepath.suffix == ".pdf":
-        chunks = chunk_pdf(Path(file_name), chunk_size=256, overlap=50)
+        chunks = chunk_pdf(filepath, chunk_size=chunk_size, overlap=overlap)
     elif filepath.suffix == ".docx":
-        chunks = chunk_docx(Path(file_name), chunk_size=256, overlap=50)
+        chunks = chunk_docx(filepath, chunk_size=chunk_size, overlap=overlap)
     elif filepath.suffix == ".pptx":
-        chunks = chunk_pptx(Path(file_name), chunk_size=256, overlap=50)
+        chunks = chunk_pptx(filepath, chunk_size=chunk_size, overlap=overlap)
     else:
-        return "Only file type accepted for now: [PDF, DOCX]"
-    # chunks = chunk_pdf(Path(file_name), chunk_size=256, overlap=50)
+        return "Only file type accepted for now: [PDF, DOCX, PPTX]"
+
 
     if len(chunks) < num_clusters:
         context = " ".join(chunks)

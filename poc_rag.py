@@ -40,7 +40,7 @@ def homepage_content():
     col11, col22 = st.columns([2, 2])
     col11.markdown("**Your uploaded file:**")
     col111, col222 = col11.columns([2, 1])
-    uploaded_file = col22.file_uploader("Upload your PDF file", type="pdf")
+    uploaded_file = col22.file_uploader("Upload your PDF file", type=["pdf", "docx", "pptx"])
 
     if uploaded_file is not None:
         col111.markdown(f"- File name: {uploaded_file.name}")
@@ -55,8 +55,8 @@ def homepage_content():
                 with open(pdf_filepath, "wb") as f:
                     f.write(uploaded_file.getbuffer())
                 requests.post(f"{FASTAPI_ENDPOINT}/set_to_not_ready")
-        
-        if requests.get(f"{FASTAPI_ENDPOINT}/is_ready").json()['message'] == False:
+        reset_vectorsearch_index = col111.button("Refresh Vector Index")
+        if (requests.get(f"{FASTAPI_ENDPOINT}/is_ready").json()['message'] == False) or (reset_vectorsearch_index):
             with st.spinner('Vectorizing the PDF ..'):
                 response = requests.post(f"{FASTAPI_ENDPOINT}/load_pdf", params={"pdf_filepath": str(pdf_filepath)})
                 st.markdown(f"[{response.status_code}] - {response.json()}")
@@ -68,6 +68,8 @@ def homepage_content():
         value="De quel type de document s'agit-il?Qui sont les signataires?Que faut-il savoir en priorité a propos de ce document?"
         # value="De quel type de document s'agit-il?Qui sont les signataires?Qui sont les sous-signés?Que faut-il savoir en priorité a propos de ce document?"
         # value="What type of document is this? When was it signed? Who are the Parties?"
+        
+        # De quel type de document s'agit-il?Je cherche a extraire les informations suivantes: - La société émettrice, - le destinataire, - Le type de prestations ou produits proposés, - La description de ce qui est proposé, - Le montant, - les conditions de facturation , - les conditions de règlement
     )
     if st.button("Ask the model"):
         if uploaded_file is not None:

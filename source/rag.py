@@ -65,7 +65,7 @@ def question_answering_prompt():
     """
     usage: print(prompt.format(context="Here is some context", question="Here is a question"))
     """
-    template = """
+    template_eng = """
         Answer the question based on the context below. If you can't 
         answer the question, reply "I don't know".
 
@@ -73,7 +73,21 @@ def question_answering_prompt():
 
         Question: {question}
     """
-    prompt = PromptTemplate.from_template(template)
+
+    template_fr = """
+        [Introduction]
+        En tant qu'assistant, et dans le mesure du possible, 
+        réponds de manière claire et concise à la question posée 
+        en te basant sur le contexte fourni ci-dessous.
+        Si tu ne peux pas y répondre car l'information n'est pas présente ou
+        pour une autre raison, répond simplement "Je ne sais pas".
+
+        [Contexte]: {context}
+
+        [Question]: {question}
+    """
+
+    prompt = PromptTemplate.from_template(template_fr)
     return prompt
 
 
