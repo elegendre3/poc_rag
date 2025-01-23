@@ -62,8 +62,11 @@ def homepage_content():
                 st.markdown(f"[{response.status_code}] - {response.json()}")
         # col222.markdown(f"- Number of pages: TODO")
 
+    
+    # Model Interactions:
     # Enter question
-    question = st.text_input(
+    qa_col1, qa_col2 = st.columns([1, 1])
+    question = qa_col1.text_input(
         "Enter your question(s) here (if multiple, separate by '?')", 
         value="De quel type de document s'agit-il?Qui sont les signataires?Que faut-il savoir en priorité a propos de ce document?"
         # value="De quel type de document s'agit-il?Qui sont les signataires?Qui sont les sous-signés?Que faut-il savoir en priorité a propos de ce document?"
@@ -71,23 +74,52 @@ def homepage_content():
         
         # De quel type de document s'agit-il?Je cherche a extraire les informations suivantes: - La société émettrice, - le destinataire, - Le type de prestations ou produits proposés, - La description de ce qui est proposé, - Le montant, - les conditions de facturation , - les conditions de règlement
     )
-    if st.button("Ask the model"):
+    if qa_col1.button("Ask the model"):
         if uploaded_file is not None:
             start = datetime.now()
-            with st.spinner('Asking the model ..'):
+            with qa_col1, st.spinner('Asking the model ..'):
                 response = requests.post(f"{FASTAPI_ENDPOINT}/qa_doc", params={"questions": question})
             end = datetime.now()
             if response.status_code == 200:
-                st.markdown(response.json()['message'])
+                qa_col1.markdown(response.json()['message'])
             else:   
-                st.markdown(f"[{response.status_code}] - {response.json()}")
+                qa_col1.markdown(f"[{response.status_code}] - {response.json()}")
             seconds = int((end - start).total_seconds()) % 60
             all_minutes = int((end - start).total_seconds()) // 60
             hours = all_minutes // 60
             minutes = all_minutes % 60
-            st.info(f"Time elapsed: [{hours}:{minutes}:{seconds}]")
+            qa_col1.info(f"Time elapsed: [{hours}:{minutes}:{seconds}]")
         else:
-            st.write("/!\ Please upload a PDF file first")
+            qa_col1.write("/!\ Please upload a PDF file first")
+
+    information_pieces_to_retrieve = [
+        "la société ou cabinet émettrice",
+        "la société ou cabinet destinataire",
+        "le type de prestations ou produits proposés",
+        "la description de ce que la mission ou l'offre propose",
+        "le montant de la proposition",
+        "les conditions de facturation",
+        "les conditions de règlement",
+    ]
+    to_retrieve = qa_col2.multiselect(label='Information spécifiques à extraire', options=information_pieces_to_retrieve, default=information_pieces_to_retrieve)
+    extractor_questions = "?".join(["Je cherche a connaitre: " + x for x in to_retrieve])
+    if qa_col2.button("Retrieve"):
+        if uploaded_file is not None:
+            start = datetime.now()
+            with qa_col2, st.spinner('Retrieving ..'):
+                response = requests.post(f"{FASTAPI_ENDPOINT}/qa_doc", params={"questions": extractor_questions})
+            end = datetime.now()
+            if response.status_code == 200:
+                qa_col2.markdown(response.json()['message'])
+            else:   
+                qa_col2.markdown(f"[{response.status_code}] - {response.json()}")
+            seconds = int((end - start).total_seconds()) % 60
+            all_minutes = int((end - start).total_seconds()) // 60
+            hours = all_minutes // 60
+            minutes = all_minutes % 60
+            qa_col2.info(f"Time elapsed: [{hours}:{minutes}:{seconds}]")
+        else:
+            qa_col2.write("/!\ Please upload a PDF file first")
 
     if st.button("Check Model Status"):
         response = requests.get(f"{FASTAPI_ENDPOINT}/status_summary")

@@ -11,9 +11,7 @@ from langchain_core.output_parsers import StrOutputParser
 
 
 from source.text import (
-    chunk_docx,
-    chunk_pdf,
-    chunk_pptx,
+    chunk_doc,
     load_pdf,
 )
 from source.model import load_model_and_embeddings
@@ -29,7 +27,7 @@ def doc_classification_prompt():
     """
     usage: print(prompt.format(context="Here is some context", question="Here is a question"))
     """
-    template = """
+    template_eng = """
         Based on these excerpts of the document,
         Document excerpts: {context}
         
@@ -40,6 +38,26 @@ def doc_classification_prompt():
         Please format your output as follows:
         "This document is a [???]. The information that leads to this conclusion is: [???]"
     """
+
+    template = """
+        [Introduction]
+        Basé sur les extraits suivants de ce document.
+        Répond a la question suivante: De quel type de document s'agit-il? 
+        Si tu n'est pas sur de réponse, répond simplement "Je ne sais pas".
+
+        La réponse doit etre formattée en type JSON comme le template suivant avec les cles: [document_type, proof, confidence, key_words]:
+        {{
+            "document_type": [le type de document],
+            "proof": [explications ou preuves concises soutenant la decision], 
+            "confidence": [le niveau de confiance dans la prediction sur une echelle de 1 a 5],
+            "parties": [personnes physiques ou morales, societes ou cabinets mentionnes],
+            "key_words": [5 mots-clés importants sur le document, permettant une recherche et indexation efficaces]
+        }}
+        
+        [Contexte]
+        Extraits du document: {context}
+    """
+
     prompt = PromptTemplate.from_template(template)
     return prompt
 
@@ -53,15 +71,7 @@ def doc_classification_pipeline(file_name: str, model, embeddings) -> str:
     overlap = 50
 
     filepath = Path(file_name)
-    if filepath.suffix == ".pdf":
-        chunks = chunk_pdf(filepath, chunk_size=chunk_size, overlap=overlap)
-    elif filepath.suffix == ".docx":
-        chunks = chunk_docx(filepath, chunk_size=chunk_size, overlap=overlap)
-    elif filepath.suffix == ".pptx":
-        chunks = chunk_pptx(filepath, chunk_size=chunk_size, overlap=overlap)
-    else:
-        return "Only file type accepted for now: [PDF, DOCX, PPTX]"
-
+    chunks = chunk_doc(filepath, chunk_size=chunk_size, overlap=overlap)
 
     if len(chunks) < num_clusters:
         context = " ".join(chunks)
@@ -91,9 +101,9 @@ def doc_classification_pipeline(file_name: str, model, embeddings) -> str:
 
 
 def main():
-    # file_name = "data/pdfs/CDI Eliott LEGENDRE.pdf"
+    file_name = "data/pdfs/CDI Eliott LEGENDRE.pdf"
     # file_name = "data/pdfs/Eliott Legendre CV.pdf"
-    file_name = "data/pdfs/lettre urssaf.pdf"
+    # file_name = "data/pdfs/lettre urssaf.pdf"
     model, embeddings = load_model_and_embeddings(MODEL, OPENAI_API_KEY)
     
     response = doc_classification_pipeline(file_name, model, embeddings)

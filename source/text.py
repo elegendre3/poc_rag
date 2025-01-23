@@ -28,7 +28,7 @@ def load_pptx(file_path: Path):
     return loader.load_and_split()
 
 
-def chunk_text(text: str, chunk_size: int = 512, overlap: int = 50) -> List[str]:
+def chunk_text(text: str, chunk_size: int = 512, overlap: int = 50, metadata: List[str] = None) -> List[str]:
     """
     Splits text into chunks of specified size with optional overlap.
 
@@ -50,16 +50,19 @@ def chunk_text(text: str, chunk_size: int = 512, overlap: int = 50) -> List[str]
     while start < len(words):
         end = min(start + chunk_size, len(words))
         chunk = " ".join(words[start:end])
+        if (metadata is not None) and (len(metadata) > 0):
+            chunk = "[Document keywords: {}] ".format(", ".join(metadata)) + chunk
         chunks.append(chunk)
         start += chunk_size - overlap
     return chunks
 
-def chunk_pdf(file_path: Path, chunk_size: int = 512, overlap: int = 50) -> List[str]:
+
+def chunk_pdf(file_path: Path, chunk_size: int = 512, overlap: int = 50, metadata: List[str] = None) -> List[str]:
     pages = load_pdf(file_path)
     if (len(pages) == 0) or ('/UNIC' in pages[0].page_content):
         logging.info('Warning: PDF has no text layer')
         logging.info('OCRing..')
-        # if ".pdf" == file_path.as_posix()[-4:]:
+        to_delete = []
         if ".pdf" == file_path.suffix:
             import fitz
             doc = fitz.open(file_path)
@@ -73,6 +76,7 @@ def chunk_pdf(file_path: Path, chunk_size: int = 512, overlap: int = 50) -> List
             for i in range(count):
                 val = file_path.parent / f"{file_path.stem}_page_{str(i+1)}.jpg"
                 page_files.append(val.as_posix())
+                to_delete.append(val.as_posix())  # keep track of created files to delete later
                 page = doc.load_page(i)
                 pix = page.get_pixmap(matrix=mat)
                 pix.save(val)
@@ -83,24 +87,41 @@ def chunk_pdf(file_path: Path, chunk_size: int = 512, overlap: int = 50) -> List
         reader = easyocr.Reader(['fr','en']) # this needs to run only once to load the model into memory
         ocred_texts = [reader.readtext(filepath) for filepath in page_files]
         flattened_list = [item[1] for sublist in ocred_texts for item in sublist]
+        
+        # No need to rechunk for now
         # full_text = " ".join(flattened_list)
         # chunks = chunk_text(full_text, chunk_size=chunk_size, overlap=overlap)
+
+        # clean up
+        for fp in to_delete:
+            Path(fp).unlink()
         return flattened_list
     
     text = "\n ".join([page.page_content for page in pages])
-    chunks = chunk_text(text, chunk_size=chunk_size, overlap=overlap)
+    chunks = chunk_text(text, chunk_size=chunk_size, overlap=overlap, metadata=metadata)
     return chunks
 
-def chunk_docx(file_path: Path, chunk_size: int = 512, overlap: int = 50) -> List[str]:
+def chunk_docx(file_path: Path, chunk_size: int = 512, overlap: int = 50, metadata: List[str] = None) -> List[str]:
     pages = load_docx(file_path)
     text = "\n ".join([page.page_content for page in pages])
-    chunks = chunk_text(text, chunk_size=chunk_size, overlap=overlap)
+    chunks = chunk_text(text, chunk_size=chunk_size, overlap=overlap, metadata=metadata)
     return chunks
 
-def chunk_pptx(file_path: Path, chunk_size: int = 512, overlap: int = 50) -> List[str]:
+def chunk_pptx(file_path: Path, chunk_size: int = 512, overlap: int = 50, metadata: List[str] = None) -> List[str]:
     pages = load_pptx(file_path)
     text = "\n ".join([page.page_content for page in pages])
-    chunks = chunk_text(text, chunk_size=chunk_size, overlap=overlap)
+    chunks = chunk_text(text, chunk_size=chunk_size, overlap=overlap, metadata=metadata)
+    return chunks
+
+def chunk_doc(file_path: Path, chunk_size: int = 512, overlap: int = 50, metadata: List[str] = None) -> List[str]:
+    if file_path.suffix == ".pdf":
+        chunks = chunk_pdf(file_path, chunk_size=chunk_size, overlap=overlap, metadata=metadata)
+    elif file_path.suffix == ".docx":
+        chunks = chunk_docx(file_path, chunk_size=chunk_size, overlap=overlap, metadata=metadata)
+    elif file_path.suffix == ".pptx":
+        chunks = chunk_pptx(file_path, chunk_size=chunk_size, overlap=overlap, metadata=metadata)
+    else:
+        return "Only file type accepted for now: [PDF, DOCX, PPTX]"
     return chunks
 
 
@@ -373,7 +394,7 @@ if __name__ == "__main__":
     # print('w')
 
     # doc = load_docx(Path("data/alkane/propositions_alkane/Proposition - Mission d'accompagnement ERP - Bredin Prat.docx"))
-    doc = load_pptx("data/alkane/propositions_alkane/Proposition d'accompagnement - Projet Temps - Darrois Villey.pptx")
+    doc = load_pptx(Path("data/alkane/propositions_alkane/Proposition d'accompagnement - Projet Temps - Darrois Villey.pptx"))
     print('w')
     # import easyocr
     # reader = easyocr.Reader(['fr','en']) # this needs to run only once to load the model into memory

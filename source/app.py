@@ -24,9 +24,10 @@ from source.rag import (
     question_answering_prompt,
 )
 from source.text import (
-    chunk_docx,
-    chunk_pdf,
-    chunk_pptx,
+    # chunk_docx,
+    # chunk_pdf,
+    # chunk_pptx,
+    chunk_doc,
     load_pdf,
 )
 from source.vector_store import (
@@ -42,7 +43,7 @@ class Settings(BaseSettings):
     openai_api_key: Optional[str] = None
     pinecone_api_key: Optional[str] = None
     model_name: str = "llama3.2"
-    # model_name: str = "gpt-4o-mini"
+    model_name: str = "gpt-4o-mini"
     embeddings_dim: int = 1536
     chunk_size: int = 512
     chunk_overlap: int = 50
@@ -102,15 +103,17 @@ class Model:
     def load_pdf(self, filepath):
         logging.info(f"Loading [{filepath}]")
 
-        if filepath.suffix == ".pdf":
-            chunks = chunk_pdf(filepath, chunk_size=self.settings.chunk_size, overlap=self.settings.chunk_overlap)
-        elif filepath.suffix == ".docx":
-            chunks = chunk_docx(filepath, chunk_size=self.settings.chunk_size, overlap=self.settings.chunk_overlap)
-        elif filepath.suffix == ".pptx":
-            chunks = chunk_pptx(filepath, chunk_size=self.settings.chunk_size, overlap=self.settings.chunk_overlap)
-        else:
-            return "Only file type accepted for now: [PDF, DOCX, PPTX]"
-                
+        # if filepath.suffix == ".pdf":
+        #     chunks = chunk_pdf(filepath, chunk_size=self.settings.chunk_size, overlap=self.settings.chunk_overlap)
+        # elif filepath.suffix == ".docx":
+        #     chunks = chunk_docx(filepath, chunk_size=self.settings.chunk_size, overlap=self.settings.chunk_overlap)
+        # elif filepath.suffix == ".pptx":
+        #     chunks = chunk_pptx(filepath, chunk_size=self.settings.chunk_size, overlap=self.settings.chunk_overlap)
+        # else:
+        #     return "Only file type accepted for now: [PDF, DOCX, PPTX]"
+        
+        chunks = chunk_doc(filepath, chunk_size=self.settings.chunk_size, overlap=self.settings.chunk_overlap, metadata=None)
+
         logging.info(f"Vectorizing pdf..")
         self.vectorize_pdf(str(filepath.stem), chunks)
         return {"file_name": filepath.as_posix(), "num_chunks": len(chunks)}
