@@ -43,7 +43,7 @@ MODEL = "llama3.2"
 
 
 
-def create_rag_chain(retriever, model):
+def create_qa_rag_chain(retriever, model):
     prompt = question_answering_prompt()
     parser = StrOutputParser()
     chain = (
@@ -57,10 +57,25 @@ def create_rag_chain(retriever, model):
     )
     return chain
 
+def create_propal_rag_chain(retriever, model):        
+    prompt = propal_retriever_prompt()
+    parser = StrOutputParser()
+    chain = (
+        {
+            "context": itemgetter("question") | retriever,
+            "question": itemgetter("question"),
+        }
+        | prompt
+        | model
+        | parser
+    )
+    return chain
+
+
 def pdf_qa_pipeline_inmemory(pages, embeddings, model):
 
     retriever = create_inmemory_retriever(pages, embeddings)
-    chain = create_rag_chain(retriever, model)
+    chain = create_qa_rag_chain(retriever, model)
     return chain
 
 
@@ -91,6 +106,45 @@ def question_answering_prompt():
     """
 
     prompt = PromptTemplate.from_template(template_fr)
+    return prompt
+
+def propal_retriever_prompt():
+    """
+    usage: print(prompt.format(context="Here is some context", question="Here is a question"))
+    """
+
+    # question_part_prompt = """
+    #     Vous recevrez des extraits d'un document en lien avec une proposition de services, 
+    #     et devrez extraire: 
+    #         la société ou cabinet émetteur,
+    #         la société ou cabinet destinataire,
+    #         le type de prestations ou produits proposés,
+    #         la description de ce que la mission ou l'offre propose,
+    #         le montant de la proposition,
+    #         les conditions de facturation,
+    #         les conditions de règlement,
+    # """
+
+    template_propal_json = """
+        [Instructions]: {question}
+        
+        Retournez l'information extraite dans un format JSON.
+        Si la réponse n'est pas evidente/présente, repondez "je ne sais pas".
+        
+        Voici un exemple: {{
+        "emetteur": "Société AAA", 
+        "proposition": "La societe AAA propose un accompagnement sur le sujet de l'implementation d'un outil type ERP,
+        , de conduite du changement et de formation des collaborateurs.",
+        "montant": "80,000 euros hors taxes par an pour la license, ainsi que des frais de conseil et de deplacement seront a prevoir.", 
+        "conditions de facturation": "La mission sera facturée au temps passé, une facture sera émise à chaque fin de mois pour le nombre de jours effectivement consacrés à la mission.
+            Si des déplacements sont nécessaires hors de la région parisienne, les frais afférents (train, avion, hôtel, restaurant) seront refacturés à l’identique.", 
+        "conditions de règlement": "A réception de facture.", 
+        }}
+
+        [Extraits]: {context}
+    """
+
+    prompt = PromptTemplate.from_template(template_propal_json)
     return prompt
 
 
@@ -196,7 +250,7 @@ def qa_rag_chain():
     time.sleep(10)  # Wait for the upserted vectors to be indexed
     print(index.describe_index_stats())
 
-    chain = create_rag_chain(pc_retriever, model)
+    chain = create_qa_rag_chain(pc_retriever, model)
 
     for question in ["What type of document is this?"]:
         print(f"Question: {question}")
@@ -238,7 +292,8 @@ def ensemble_rag_chain():
     time.sleep(60)  # Wait for the upserted vectors to be indexed
     print(index.describe_index_stats())
 
-    chain = create_rag_chain(pc_retriever, model)
+    chain = create_qa_rag_chain(pc_retriever, model)
+    # chain = create_propal_rag_chain(pc_retriever, model)
 
     for question in [
         # needs global view (kmeans)

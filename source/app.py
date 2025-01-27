@@ -17,16 +17,14 @@ from pydantic_settings import BaseSettings
 import uvicorn 
 
 from source.rag import (
-    create_rag_chain,
+    create_qa_rag_chain,
+    create_propal_rag_chain,
     load_pdf,
     load_model_and_embeddings,
     pdf_qa_pipeline_inmemory,
     question_answering_prompt,
 )
 from source.text import (
-    # chunk_docx,
-    # chunk_pdf,
-    # chunk_pptx,
     chunk_doc,
     load_pdf,
 )
@@ -61,6 +59,7 @@ class Model:
         self.model = None
         self.embeddings = None
         self.chain = None
+        self.propal_chain = None
         self.pc = None
         self.index_name = None
         self.index = None
@@ -103,15 +102,6 @@ class Model:
     def load_pdf(self, filepath):
         logging.info(f"Loading [{filepath}]")
 
-        # if filepath.suffix == ".pdf":
-        #     chunks = chunk_pdf(filepath, chunk_size=self.settings.chunk_size, overlap=self.settings.chunk_overlap)
-        # elif filepath.suffix == ".docx":
-        #     chunks = chunk_docx(filepath, chunk_size=self.settings.chunk_size, overlap=self.settings.chunk_overlap)
-        # elif filepath.suffix == ".pptx":
-        #     chunks = chunk_pptx(filepath, chunk_size=self.settings.chunk_size, overlap=self.settings.chunk_overlap)
-        # else:
-        #     return "Only file type accepted for now: [PDF, DOCX, PPTX]"
-        
         chunks = chunk_doc(filepath, chunk_size=self.settings.chunk_size, overlap=self.settings.chunk_overlap, metadata=None)
 
         logging.info(f"Vectorizing pdf..")
@@ -139,7 +129,9 @@ class Model:
         while (self.index.describe_index_stats()['total_vector_count'] - init_vector_count) < len(documents):
             time.sleep(1)
         self.is_ready = True
-        self.chain = create_rag_chain(self.retriever, self.model)
+
+        self.chain = create_qa_rag_chain(self.retriever, self.model)
+        self.propal_chain = create_propal_rag_chain(self.retriever, self.model)
 
     def vectorize_pdf_inmem(self):
         self.chain = pdf_qa_pipeline_inmemory(self.pages, self.embeddings, self.model)
@@ -163,6 +155,33 @@ class Model:
         minutes = all_minutes % 60
         logging.info(f"Time elapsed: [{hours}:{minutes}:{seconds}]")
         return {"time_elapsed": f"{hours}:{minutes}:{seconds}", "result": output}
+
+    def propal_extract(self):
+
+        question_part_prompt = """
+            Vous recevrez des extraits d'un document en lien avec une proposition de services, 
+            et devrez extraire: 
+                la société ou cabinet émetteur,
+                la société ou cabinet destinataire,
+                le type de prestations ou produits proposés,
+                la description de ce que la mission ou l'offre propose,
+                le montant de la proposition,
+                les conditions de facturation,
+                les conditions de règlement,
+        """
+            
+        if not self.is_ready:
+            raise Exception("Model not ready - either no pdf or no model loaded")
+        start = datetime.now()
+        output = self.propal_chain.invoke({"question": question_part_prompt})
+        end = datetime.now()
+        seconds = int((end - start).total_seconds()) % 60
+        all_minutes = int((end - start).total_seconds()) // 60
+        hours = all_minutes // 60
+        minutes = all_minutes % 60
+        logging.info(f"Time elapsed: [{hours}:{minutes}:{seconds}]")
+        return {"time_elapsed": f"{hours}:{minutes}:{seconds}", "result": output}
+
 
     def ask_with_context(self, context: str, question: str):
         if self.model is None:
@@ -328,6 +347,16 @@ def load_pdf_file(pdf_filepath: str):
 def qa_doc(questions: str):
     try:
         result = pdf_model.qa_doc(questions)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error creating PDF chain: {str(e)}")
+    return {"message": result["result"]}
+
+@sleep_and_retry
+@limits(calls=settings.max_calls_per_minute, period=settings.ratelimit_oneminute)
+@app.post("/propal_extract")
+def propal_extract():
+    try:
+        result = pdf_model.propal_extract()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error creating PDF chain: {str(e)}")
     return {"message": result["result"]}
