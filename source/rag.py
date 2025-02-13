@@ -1,3 +1,4 @@
+import json
 from operator import itemgetter
 import os
 from pathlib import Path
@@ -14,6 +15,7 @@ from langchain_pinecone import PineconeVectorStore
 from pinecone.grpc import PineconeGRPC as Pinecone
 
 
+from source.doc_classification import doc_classification_pipeline
 from source.text import (
     chunk_pdf,
     chunk_doc,
@@ -29,6 +31,7 @@ from source.vector_store import (
     create_retriever_pinecone,
     delete_index_pinecone,
 )
+
 
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -266,6 +269,9 @@ def ensemble_rag_chain():
 
     model, embeddings, pc, index, pc_vectorstore, pc_retriever = init_model_and_vectorstore(index_name=index_name, top_k=top_k)
 
+    parser = StrOutputParser()
+    chain = model | parser
+
     documents = []
     files_path = Path("data/alkane")
     c = 0
@@ -281,9 +287,36 @@ def ensemble_rag_chain():
             continue
         print(filename)
         c+=1
-        # here you can add more than just doc file
-        # e.g doc keywords extracted by a previous call to LLM
-        chunks = chunk_doc(file, chunk_size=chunk_size, overlap=chunk_overlap, metadata=[f"Titre du document: {filename}"])
+        
+        # ENRICHMENT
+        # Get doc type and keywords
+        doc_keywords = []
+        response = doc_classification_pipeline(file, model, embeddings)
+        try:
+            doc_json = json.loads(response)
+        except json.decoder.JSONDecodeError as e:
+            try:
+                fixed_response = chain.invoke(f"Please fix the following json: {response}. Only return the fixed json to be ingested downstream. Your response has to start with '{' and end with '}'")
+                # remove any non-json characters
+                doc_json = json.loads(fixed_response.replace("\\", ''))
+            except Exception as e:
+                print(f'Doc [{filename}] could not be classified, output is non-json')
+                doc_json = None
+        
+        if doc_json is not None:   
+            for key in ["document_type", "parties", "key_words"]:                
+                if key in doc_json:
+                    if isinstance(doc_json[key], str):
+                        doc_keywords.append(doc_json[key])
+                    elif isinstance(doc_json[key], list):
+                        doc_keywords.extend(doc_json[key])
+                    else:
+                        print(f"Key [{key}] is neither str nor list")
+
+        print(doc_keywords)
+        # 
+
+        chunks = chunk_doc(file, chunk_size=chunk_size, overlap=chunk_overlap, metadata=doc_keywords)
         documents.extend([Document(page_content=d, metadata={"title": filename}) for d in chunks])
 
     pc_vectorstore.add_documents(documents=documents, ids=[str(uuid.uuid4()) for _ in range(len(documents))])
@@ -297,7 +330,7 @@ def ensemble_rag_chain():
 
     for question in [
         # needs global view (kmeans)
-        # "Je fais de la fouille documentaire, et je cherche a avoir une idée globale du type de documents en présence, ainsi que plus precisement, le type d'activité evoquée, les clients si certains ont recurrents, et les dates importantes et echeances a avoir en tete pour les prochains mois et annees",
+        "Donne moi une vision globale de ma base de documents, je veux avoir une idée globale du type de documents en présence, je veux en particulier savoir quel type d'activité est evoqué, les clients si certains sont recurrents, et les dates importantes et echeances a avoir en tete pour les prochains mois et annees. Je ne veux pas de strategie pour el faire, je veux extraire les informations a disposition.",
         "Quelles sont les informations disponibles sur le fournisseur: Intapp? Plus précisement je veux savoir, basé sur mes documents, avec les extraits qui le montrent: - avec quels clients ils ont travaillé? - sur quels sujets? - a quelles dates?"
     ]:
         print(f"Question: {question}")

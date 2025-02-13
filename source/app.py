@@ -40,7 +40,7 @@ from source.doc_classification import doc_classification_pipeline
 class Settings(BaseSettings):
     openai_api_key: Optional[str] = None
     pinecone_api_key: Optional[str] = None
-    model_name: str = "llama3.2"
+    # model_name: str = "llama3.2"
     model_name: str = "gpt-4o-mini"
     embeddings_dim: int = 1536
     chunk_size: int = 512

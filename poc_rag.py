@@ -10,7 +10,7 @@ st.set_page_config(page_title='POC RAG', page_icon='data/alkane_logo.png', layou
 
 DATA_ROOT = Path('data')
 PDFS_ROOT = DATA_ROOT / "pdfs"
-MODEL = "llama3.2"
+# MODEL = "llama3.2"
 FASTAPI_ENDPOINT = "http://localhost:4557"
 
 
